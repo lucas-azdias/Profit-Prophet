@@ -1,0 +1,50 @@
+[project]
+name = "portfolio-manager"
+version = "0.1.0"
+description = "Manage and optimize your investments across multiple asset classes in one place. Track your current allocations, compare them to your target portfolio, and get clear recommendations on where to invest new funds as your wealth grows."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.4",
+    "sqlalchemy>=2.0.50",
+    "textual>=8.2.7",
+]
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.46.0",
+    "pre-commit>=4.6.0",
+    "pyright>=1.1.410",
+    "ruff>=0.15.16",
+]
+
+[tool.poe.tasks]
+start = "uv run -m src"
+set-dev = "pre-commit install"
+pre-commit = "pre-commit run --all-files"
+check = "ruff check ./src"
+check-fix = "ruff check ./src --fix"
+format = "ruff format ./src"
+types = "pyright"
+revise = "uv run alembic revision --autogenerate -m"
+
+[tool.ruff]
+include = ["src/**"]
+line-length = 120
+format.quote-style = "double"
+format.indent-style = "space"
+lint.preview = true
+lint.select = ["ALL"]
+
+[tool.pyright]
+include = ["src"]
+venv = ".venv"
+venvPath = "."
+typeCheckingMode = "strict"
+reportIncompatibleMethodOverride = "error"
+reportMissingParameterType = "error"
+reportMissingTypeArgument = "error"
+reportUnknownParameterType = "error"
+reportUnknownArgumentType = "error"
+reportUnknownVariableType = "error"
