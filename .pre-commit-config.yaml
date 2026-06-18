@@ -1,4 +1,9 @@
 repos:
+    - repo: https://github.com/RobertCraigie/pyright-python
+      rev: v1.1.410
+      hooks:
+          - id: pyright
+
     - repo: https://github.com/astral-sh/ruff-pre-commit
       rev: v0.15.16
       hooks:
@@ -7,8 +12,3 @@ repos:
 
           - id: ruff-check
             args: ["./src", "--fix"]
-
-    - repo: https://github.com/RobertCraigie/pyright-python
-      rev: v1.1.410
-      hooks:
-          - id: pyright
