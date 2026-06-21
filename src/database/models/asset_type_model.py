@@ -33,6 +33,10 @@ class AssetTypeModel(Base, Model):
         proportion (int):
             Target allocation proportion assigned to this asset type.
 
+        is_unitary_asset (bool):
+            Whether asset quantities should be ignored during
+            calculations.
+
         is_question_scored (bool):
             Indicates whether the asset type allocation is determined
             through questionnaire scoring.
@@ -57,6 +61,7 @@ class AssetTypeModel(Base, Model):
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(sqlalchemy.String)
     proportion: Mapped[int] = mapped_column(sqlalchemy.Integer)
+    is_unitary_asset: Mapped[bool] = mapped_column(sqlalchemy.Boolean, default=True)
     is_question_scored: Mapped[bool] = mapped_column(sqlalchemy.Boolean, default=False)
 
     portfolio_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey("portfolio.id"))
@@ -65,7 +70,11 @@ class AssetTypeModel(Base, Model):
     portfolio: Mapped[PortfolioModel] = relationship("PortfolioModel", back_populates=__plural__)
 
     # 1-N
-    assets: Mapped[list[AssetModel]] = relationship("AssetModel", back_populates=__tablename__, uselist=True)
+    assets: Mapped[list[AssetModel]] = relationship(
+        "AssetModel",
+        back_populates=__tablename__,
+        uselist=True,
+    )
     score_questions: Mapped[list[ScoreQuestionModel]] = relationship(
         "ScoreQuestionModel",
         back_populates=__tablename__,

@@ -6,6 +6,8 @@ This module defines the :class:`TransactionModel`, which represents a
 transaction performed for an asset.
 """
 
+# IGNORE: Required at runtime because SQLAlchemy resolves Mapped annotations
+import datetime  # noqa: TC003
 import typing
 
 import sqlalchemy
@@ -31,6 +33,9 @@ class TransactionModel(Base, Model):
         quantity (int):
             Quantity of asset units involved in the transaction.
 
+        done_at (datetime.datetime):
+            Date and time when the transaction was executed.
+
         asset_id (int):
             Foreign key referencing the associated asset.
 
@@ -45,6 +50,7 @@ class TransactionModel(Base, Model):
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     price: Mapped[float] = mapped_column(sqlalchemy.Float)
     quantity: Mapped[int] = mapped_column(sqlalchemy.Integer)
+    done_at: Mapped[datetime.datetime] = mapped_column(sqlalchemy.DateTime(timezone=True))
 
     asset_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey("asset.id"))
 

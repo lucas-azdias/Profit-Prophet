@@ -42,6 +42,7 @@ class Model:
     __plural__: str
     __table__: sqlalchemy.Table
 
+    # IGNORE: As it is a generic class, `Any` was used to ignore all parameters
     def __init_subclass__(cls, **kwargs: typing.Any) -> None:  # noqa: ANN401
         """Validate model metadata during subclass creation.
 

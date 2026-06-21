@@ -11,6 +11,7 @@ perform CRUD operations through a common user interface without
 requiring model-specific screens.
 """
 
+import datetime
 import enum
 import typing
 
@@ -30,7 +31,19 @@ if typing.TYPE_CHECKING:
 
 
 class CrudSelectValues(enum.Enum):
-    """Supported CRUD operations available in the interface."""
+    """Supported CRUD operations available in the interface.
+
+    Attributes:
+        ADD (enum.auto):
+            Create a new record in the selected table.
+
+        EDIT (enum.auto):
+            Update the currently selected record in the data table.
+
+        DELETE (enum.auto):
+            Remove the currently selected record from the database.
+
+    """
 
     ADD = enum.auto()
     EDIT = enum.auto()
@@ -55,21 +68,6 @@ class CrudMenu(UserScreen):
     ]
 
     CSS = """
-    .screen {
-        width: 100%;
-        height: 100%;
-    }
-
-    .sidebar {
-        width: 20;
-        height: 100%;
-    }
-
-    .sidebar Button {
-        width: 100%;
-        height: 3;
-    }
-
     .input-options {
         width: 1fr;
         height: 3;
@@ -78,10 +76,6 @@ class CrudMenu(UserScreen):
     .input-box {
         width: 1fr;
         align-horizontal: left;
-    }
-
-    .input {
-        height: 3;
     }
 
     .options-box {
@@ -120,9 +114,11 @@ class CrudMenu(UserScreen):
                         with Vertical(classes="input-box"):
                             yield Input(
                                 id=f"input-{model.__tablename__}",
-                                classes="input",
                                 placeholder="Type row data...",
-                                tooltip='Type row data and separate columns with ";"',
+                                tooltip=(
+                                    'Type row data, separate columns with ";" '
+                                    'and use "@" for default value'
+                                ),
                             )
                         with Horizontal(classes="options-box"):
                             yield Select[CrudSelectValues](
@@ -180,7 +176,10 @@ class CrudMenu(UserScreen):
         model = self.__find_current_model(event.button, button_confirm_prefix)
 
         # Gets the select element
-        select = typing.cast("Select[CrudSelectValues]", self.query_one(f"#select-{model.__tablename__}", Select))
+        select = typing.cast(
+            "Select[CrudSelectValues]",
+            self.query_one(f"#select-{model.__tablename__}", Select),
+        )
 
         # Matches the selected action and executes it
         match select.value:
@@ -191,7 +190,9 @@ class CrudMenu(UserScreen):
             case CrudSelectValues.DELETE:
                 self.run_worker(self.__delete_instance(model))
             case _:
-                pass
+                msg = "Select an operation first"
+                self.notify(msg, severity="warning")
+                self.app.logger.log(msg, msg_type="warning")
 
     def action_refresh_data(self) -> None:
         """Refresh the currently displayed model data.
@@ -210,9 +211,27 @@ class CrudMenu(UserScreen):
         # Clears the input and reloads data in the table
         self.run_worker(self.__refresh_data(model))
 
+    @staticmethod
+    def __parse_bool(value: str) -> bool:
+        match value.strip().lower():
+            case "true" | "1" | "yes" | "y":
+                return True
+            case "false" | "0" | "no" | "n":
+                return False
+            case _:
+                msg = f"Invalid boolean value: {value}"
+                raise ValueError(msg)
+
     def __find_current_model(self, widget: Widget, prefix: str) -> type[Model]:
         if not widget.id:
             msg = f"Couldn't find {widget.__class__.__name__}'s id"
+            raise RuntimeError(msg)
+
+        if not widget.id.startswith(prefix):
+            msg = (
+                f"{widget.__class__.__name__}'s id ('{widget.id}') "
+                f"doesn't contain prefix '{prefix}'"
+            )
             raise RuntimeError(msg)
 
         # Gets the tablename from tab pane
@@ -257,12 +276,34 @@ class CrudMenu(UserScreen):
         # Typed data for each column
         data: dict[str, object] = {}
 
+        # Standard converters for some python types
+        converters: dict[type[object], typing.Callable[[str], object]] = {
+            bool: lambda x: bool(self.__parse_bool(x)),
+            datetime.datetime: datetime.datetime.fromisoformat,
+            datetime.date: datetime.date.fromisoformat,
+        }
+
         # Coverts each column's value to the correct type
         for column, value in zip(columns, values, strict=True):
-            python_type = getattr(column.type, "python_type", str)
+            python_type: type[object] = getattr(column.type, "python_type", str)
+
+            # Default case
+            if value == "@":
+                if column.default is not None or column.nullable:
+                    continue
+
+                msg = f"Column '{column.name}' requires a value."
+                self.notify(msg, severity="warning")
+                self.app.logger.log(msg, msg_type="warning")
+                return None
+
+            # Gets standard converter
+            converter = converters.get(python_type, python_type)
 
             try:
-                data[column.name] = python_type(value)
+                # Common case
+                data[column.name] = converter(value)
+
             except ValueError:
                 msg = f"Invalid value for column '{column.name}'"
                 self.notify(msg, severity="error")
@@ -273,7 +314,10 @@ class CrudMenu(UserScreen):
 
     async def __load_data_table(self, model: type[Model]) -> None:
         # Gets the respective data table
-        data_table = typing.cast("DataTable[str]", self.query_one(f"#data-table-{model.__tablename__}", DataTable))
+        data_table = typing.cast(
+            "DataTable[str]",
+            self.query_one(f"#data-table-{model.__tablename__}", DataTable),
+        )
 
         # Clears data in the table
         data_table.clear(columns=True)
@@ -333,7 +377,10 @@ class CrudMenu(UserScreen):
             return
 
         # Gets the respective data table
-        data_table = typing.cast("DataTable[str]", self.query_one(f"#data-table-{model.__tablename__}", DataTable))
+        data_table = typing.cast(
+            "DataTable[str]",
+            self.query_one(f"#data-table-{model.__tablename__}", DataTable),
+        )
 
         # Gets selected position
         row_key, _ = data_table.coordinate_to_cell_key(data_table.cursor_coordinate)
@@ -348,11 +395,15 @@ class CrudMenu(UserScreen):
                 row_data[column.key] = value
 
         # Compares input and table data to define data to be updated
-        update_data = {key: value for key, value in input_data.items() if str(value) != row_data[key]}
+        update_data = {
+            key: value for key, value in input_data.items() if str(value) != row_data[key]
+        }
 
         # Commits the change to the database
         async with self.app.get_session() as session:
-            await session.execute(sqlalchemy.update(model).filter_by(**pk_data).values(**update_data))
+            await session.execute(
+                sqlalchemy.update(model).filter_by(**pk_data).values(**update_data),
+            )
             await session.commit()
 
         # Clears the input and reloads data in the table
@@ -364,7 +415,10 @@ class CrudMenu(UserScreen):
         self.app.logger.log(f"Deleting '{model.__tablename__}' instance")
 
         # Gets the respective data table
-        data_table = typing.cast("DataTable[str]", self.query_one(f"#data-table-{model.__tablename__}", DataTable))
+        data_table = typing.cast(
+            "DataTable[str]",
+            self.query_one(f"#data-table-{model.__tablename__}", DataTable),
+        )
 
         # Gets selected position
         row_key, _ = data_table.coordinate_to_cell_key(data_table.cursor_coordinate)

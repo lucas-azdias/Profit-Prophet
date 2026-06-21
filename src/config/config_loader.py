@@ -2,10 +2,10 @@
 
 """Command-line configuration loading and parsing.
 
-This module provides the ``ConfigLoader`` class, responsible for defining,
+This module provides the :class:`ConfigLoader` class, responsible for defining,
 parsing, and validating command-line arguments.
 
-The loader converts user-supplied CLI options into a ``ConfigDTO`` instance
+The loader converts user-supplied CLI options into a :class:`ConfigDTO` instance
 that encapsulates settings.
 
 It serves as the primary entry point for transforming command-line input into
@@ -29,14 +29,19 @@ class ConfigLoader:
     """
 
     def __init__(self) -> None:
-        """Initialize the CLI argument parser and parse user-provided arguments into a :class:`ConfigDTO` object."""
+        """Initialize the command-line interface configuration.
+
+        Creates the argument parser, processes command-line arguments supplied by
+        the user, and constructs a :class:`ConfigDTO` instance containing the
+        validated runtime configuration.
+        """
         # Argument parser for all parameters available for user via CLI
         self.__parser = argparse.ArgumentParser(
             prog="Profit Prophet",
             description=(
-                "Manage and optimize your investments across multiple asset classes in one place. Track your "
-                "current allocations, compare them to your target portfolio, and get clear recommendations on "
-                "where to invest new funds as your wealth grows."
+                "Manage and optimize your investments across multiple asset classes in one place. "
+                "Track your current allocations, compare them to your target portfolio, and get "
+                "clear recommendations on where to invest new funds as your wealth grows."
             ),
         )
 

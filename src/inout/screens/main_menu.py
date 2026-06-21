@@ -9,6 +9,7 @@ navigation screen.
 import typing
 
 import pyfiglet
+from textual import on
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Button, Static
 
@@ -29,9 +30,7 @@ class MainMenu(UserScreen):
 
     CSS = """
     .screen {
-        width: 100%;
-        height: 100%;
-        margin-top: 3;
+        margin-top: 2;
         margin-bottom: 2;
     }
 
@@ -69,32 +68,67 @@ class MainMenu(UserScreen):
         with Horizontal(classes="screen"):
             yield Static(figlet.renderText("Profit Prophet"), classes="title")
             with Container(classes="menu-box"), VerticalScroll(classes="menu", can_focus=False):
-                yield Button("New allocation", id="button-alloc", classes="button")
-                yield Button("Visualize data", id="button-view", classes="button")
-                yield Button("Edit data", id="button-crud", classes="button")
+                yield Button("New allocation", id="button-push-alloc", classes="button button-push")
+                yield Button("Visualize data", id="button-push-view", classes="button button-push")
+                yield Button("Edit data", id="button-push-crud", classes="button button-push")
                 yield Button("Exit", id="button-exit", classes="button")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events from the main menu.
+    @on(Button.Pressed, ".button-push")
+    def handle_push_screen(self, event: Button.Pressed) -> None:
+        """Handle navigation button presses and push the corresponding screen.
+
+        This handler processes all buttons with the `.button-push` CSS class,
+        extracts the target screen name from the button ID, validates it,
+        resolves the corresponding screen from the application's screen
+        registry, and pushes it onto the navigation stack.
 
         Args:
             event (Button.Pressed):
-                Event generated when a button is pressed.
+                Event emitted when a navigation button is pressed.
+
+        Raises:
+            RuntimeError:
+                If the button has no ID, the ID does not follow the expected
+                naming convention, or the referenced screen is not registered
+                in the application.
 
         """
-        match event.button.id:
-            case "button-alloc":
-                self.app.logger.log("Pushing allocation menu screen...")
-                self.app.push_screen("alloc")
-            case "button-view":
-                self.notify("Visualizing data...")
-            case "button-crud":
-                self.app.logger.log("Pushing CRUD menu screen...")
-                self.app.push_screen("crud")
-            case "button-exit":
-                msg = "Exiting..."
-                self.notify(msg)
-                self.app.logger.log(msg)
-                self.set_timer(0.5, self.app.exit)
-            case _:
-                pass
+        prefix = "button-push-"
+
+        if not event.button.id:
+            msg = f"Couldn't find {event.button.__class__.__name__}'s id"
+            raise RuntimeError(msg)
+
+        if not event.button.id.startswith(prefix):
+            msg = (
+                f"{event.button.__class__.__name__}'s id ('{event.button.id}') "
+                f"doesn't contain prefix '{prefix}'"
+            )
+            raise RuntimeError(msg)
+
+        # Gets the screen name from button's id
+        screen_name = event.button.id.removeprefix(prefix)
+
+        # Searches for the respective screen
+        screen = self.app.SCREENS.get(screen_name, None)
+
+        if not screen:
+            msg = f"Couldn't find screen '{screen_name}' inside application"
+            raise RuntimeError(msg)
+
+        # Pushes screen
+        self.app.logger.log(f"Pushing {screen.TITLE} screen...")
+        self.app.push_screen(screen_name)
+
+    @on(Button.Pressed, "#button-exit")
+    def handle_exit(self) -> None:
+        """Handle exiting the application.
+
+        Displays a notification and logs the exit event, then schedules
+        the application to terminate after a brief delay to allow UI
+        feedback to be visible.
+        """
+        msg = "Exiting..."
+        self.notify(msg)
+        self.app.logger.log(msg)
+        self.set_timer(0.5, self.app.exit)

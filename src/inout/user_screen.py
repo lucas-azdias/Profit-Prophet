@@ -36,6 +36,7 @@ class UserScreen(Screen[None]):
     @property
     @typing.override
     def app(self) -> UserInterface:
+        # IGNORE: Ignored unknown generic type of `App` to allow type override
         return typing.cast("UserInterface", super().app)  # pyright: ignore[reportUnknownMemberType]
 
     @typing.override

@@ -30,9 +30,6 @@ class AssetModel(Base, Model):
         name (str):
             Human-readable name of the asset.
 
-        quantity (int):
-            Quantity of units owned of the asset.
-
         user_score (int | None):
             Optional score assigned by the user.
 
@@ -55,8 +52,7 @@ class AssetModel(Base, Model):
 
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(sqlalchemy.String)
-    quantity: Mapped[int] = mapped_column(sqlalchemy.Integer)
-    user_score: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=True)
+    user_score: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=True, default=None)
 
     asset_type_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey("asset_type.id"))
 
