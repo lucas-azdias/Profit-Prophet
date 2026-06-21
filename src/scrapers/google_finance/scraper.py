@@ -14,8 +14,6 @@ import re
 import typing
 import unicodedata
 
-import playwright.async_api
-
 from src.scrapers.google_finance.dtos.quote_dto import (
     QuoteDTO,
     QuoteSectionMetadataDTO,
@@ -29,14 +27,21 @@ from src.scrapers.google_finance.dtos.quote_section_dto import (
 if typing.TYPE_CHECKING:
     import types
 
+    import playwright.async_api
+
 
 class Scraper:
     """Asynchronous Google Finance quote scraper.
 
     This scraper uses Playwright to load Google Finance quote pages and
-    extract financial data into structured DTOs. Instances may be managed
-    manually through :meth:`start` and :meth:`close` or used as an
-    asynchronous context manager.
+    extract financial data into structured DTOs.
+
+    An existing Playwright browser context must be provided during
+    initialization. The scraper creates a temporary page when entering the
+    asynchronous context manager and automatically closes it when exiting.
+
+    Page resources are scoped to the asynchronous context manager protocol and
+    are automatically created on entry and closed on exit.
 
     Attributes:
         BASE_URL (Literal):
@@ -48,81 +53,38 @@ class Scraper:
 
     def __init__(
         self,
-        page: playwright.async_api.Page | None = None,
-        *,
-        channel: str = "chromium",
+        context: playwright.async_api.BrowserContext,
     ) -> None:
         """Initialize a Google Finance scraper instance.
 
-        The scraper can either operate on an existing Playwright page or create
-        and manage its own browser resources when started. If no page is
-        provided, a browser instance will be launched during
-        :meth:`start`.
-
         Args:
-            page (playwright.async_api.Page | None):
-                Existing Playwright page to use for scraping operations. When
-                omitted, the scraper creates a new browser and page when started.
-
-            channel (str):
-                Browser channel used when launching Playwright-managed browser
-                instances. Defaults to `"chromium"`.
+            context (playwright.async_api.BrowserContext):
+                Browser context used to create pages for scraping operations.
+                The context must remain valid for the entire lifetime of the
+                scraper instance.
 
         """
-        self.__page = page
-        self.__channel = channel
-
-        self.__playwright: playwright.async_api.Playwright | None = None
-        self.__browser: playwright.async_api.Browser | None = None
-
-    async def start(self) -> None:
-        """Start the scraper and initialize browser resources.
-
-        Creates a Playwright instance, launches a browser, and opens a new page
-        for scraping operations.
-
-        Raises:
-            RuntimeError:
-                If the scraper has already been started.
-
-        """
-        if self.__page is not None:
-            msg = "'GoogleFinanceScraper' has already been started"
-            raise RuntimeError(msg)
-
-        self.__playwright = await playwright.async_api.async_playwright().start()
-
-        self.__browser = await self.__playwright.chromium.launch(
-            headless=True,
-            channel=self.__channel,
-        )
-
-        self.__page = await self.__browser.new_page()
-
-    async def close(self) -> None:
-        """Release all browser resources associated with the scraper.
-
-        Closes the browser, stops Playwright and resets the scraper state.
-        """
-        if self.__browser:
-            await self.__browser.close()
-
-        if self.__playwright:
-            await self.__playwright.stop()
-
-        self.__page = None
-        self.__browser = None
-        self.__playwright = None
+        self.__context: playwright.async_api.BrowserContext | None = context
+        self.__page: playwright.async_api.Page | None = None
 
     async def __aenter__(self) -> typing.Self:
-        """Start the scraper when entering an asynchronous context.
+        """Create a page and enter a scraping session.
 
         Returns:
             Scraper:
                 The initialized scraper instance.
 
+        Raises:
+            RuntimeError:
+                If browser context has already been dispatched.
+
         """
-        await self.start()
+        if self.__context is None:
+            msg = f"'{self.__class__.__name__}' has already been dispatched"
+            raise RuntimeError(msg)
+
+        self.__page = await self.__context.new_page()
+
         return self
 
     async def __aexit__(
@@ -131,7 +93,7 @@ class Scraper:
         exc: BaseException | None,
         tb: types.TracebackType | None,
     ) -> None:
-        """Close the scraper when leaving an asynchronous context.
+        """Close the active page when leaving the scraping session.
 
         Args:
             exc_type (type[BaseException] | None):
@@ -144,7 +106,22 @@ class Scraper:
                 Traceback associated with the raised exception, if any.
 
         """
-        await self.close()
+        if self.__page is not None:
+            await self.__page.close()
+            self.__page = None
+
+    async def dispatch(self) -> None:
+        """Release all resources associated with the scraper.
+
+        Closes the browser context and any pages created from it, then resets
+        the scraper state.
+
+        """
+        if self.__context is not None:
+            await self.__context.close()
+            self.__context = None
+
+        self.__page = None
 
     async def scrape_quote(self, ticker: str) -> QuoteDTO:
         """Retrieve and parse quote information for a ticker symbol.
@@ -167,14 +144,14 @@ class Scraper:
 
         """
         # Loads ticker URL
-        await self.__started_page.goto(
+        await self.__launched_page.goto(
             f"{self.BASE_URL}/{ticker}?hl=en",
             wait_until="domcontentloaded",
             timeout=60000,
         )
 
         # Waits for page to load completly with a manually selected event
-        await self.__started_page.wait_for_event(
+        await self.__launched_page.wait_for_event(
             "response",
             predicate=lambda response: response.url.endswith("/part_00000000.ts") and response.ok,
             timeout=10000,
@@ -216,9 +193,9 @@ class Scraper:
         return QuoteDTO.model_validate({**quote_data, ticker_name: ticker})
 
     @property
-    def __started_page(self) -> playwright.async_api.Page:
+    def __launched_page(self) -> playwright.async_api.Page:
         if self.__page is None:
-            msg = "'GoogleFinanceScraper' has not been started"
+            msg = f"'{self.__class__.__name__}' must be used as an async context manager."
             raise RuntimeError(msg)
 
         return self.__page
@@ -237,7 +214,7 @@ class Scraper:
         # Builds all section's data based on its metadata
         for field_name, field in section_type.model_fields.items():
             # Goes to section's XPath
-            container = self.__started_page.locator(f"xpath={xpath}")
+            container = self.__launched_page.locator(f"xpath={xpath}")
 
             # Safely extract inner types from generic unions
             field_args: tuple[type[typing.Any], ...] = typing.get_args(field.annotation)
