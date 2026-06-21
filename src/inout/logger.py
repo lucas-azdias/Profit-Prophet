@@ -85,4 +85,7 @@ class Logger:
                 self.__logger.error(log_msg)
 
     def __generate_log_path(self) -> pathlib.Path:
-        return pathlib.Path(self.__logs_path) / f"log_{datetime.datetime.now().astimezone():%Y-%m-%d_%H-%M-%S}.log"
+        return (
+            pathlib.Path(self.__logs_path)
+            / f"log_{datetime.datetime.now().astimezone():%Y-%m-%d_%H-%M-%S}.log"
+        )

@@ -261,26 +261,8 @@ class Scraper:
                 field.json_schema_extra,
             )
 
-            field_data_text: str | None = None
-
-            # Executes the selected search method for this field
-            match field_metadata.search_method:
-                case QuoteSectionFieldSearchMethods.XPATH:
-                    # Goes to section's XPath and retrieve data
-                    field_data_text = await container.locator(
-                        f"xpath={field_metadata.label}",
-                    ).text_content()
-
-                case QuoteSectionFieldSearchMethods.SPLIT_LINES:
-                    # Gets inner text and converts to lines
-                    inner_text = await container.inner_text()
-                    lines = [line for line in inner_text.splitlines() if line]
-
-                    for i in range(len(lines) - 1):
-                        # Grabs the next line if label is matched
-                        if lines[i] == field_metadata.label:
-                            field_data_text = lines[i + 1].strip()
-                            break
+            # Extracts the specified field text in the section container
+            field_data_text: str | None = await self.__extract_field_text(container, field_metadata)
 
             # No data was found for this field
             if field_data_text is None:
@@ -291,107 +273,160 @@ class Scraper:
             field_data_text = unicodedata.normalize("NFKC", field_data_text).strip()
 
             # Applies regex into data if a pattern is defined in the metadata
-            if field_metadata.regex_pattern is not None:
-                match = re.search(field_metadata.regex_pattern, field_data_text)
+            field_data_text = self.__apply_regex_in_field(field_data_text, field_metadata)
+            if field_data_text is None:
+                section_data[field_name] = None
+                continue
 
-                # Couldn't match any data for this field
-                if not match:
-                    section_data[field_name] = None
-                    continue
+            # Parses field data
+            field_data = self.__parse_data_in_field(field_data_text, field_type)
 
-                matched_result: list[str]
-
-                # If no custom ordering was requested, then use the entire regex match
-                if field_metadata.regex_order is None:
-                    matched_result = [match.group()]
-
-                # Specific group ordering was requested
-                else:
-                    # All matched named groups
-                    groups_dict = match.groupdict()
-
-                    # Extract matched chunks in the specified order
-                    matched_result = [
-                        groups_dict[group_name] or ""
-                        for group_name in field_metadata.regex_order
-                        if group_name in groups_dict
-                    ]
-
-                # Executes the post regex script
-                matched_result = list(field_metadata.post_regex(matched_result))
-
-                # Join chunks using the designated separator
-                field_data_text = field_metadata.separator.join(matched_result)
-
-            # Parsed field data
-            field_data: typing.Any | None = None
-
-            # Parses field data based on expected type
-            if field_type is str:
-                field_data = field_data_text
-
-            elif field_type is decimal.Decimal:
-                # Checks if value is a percentage value (e.g. "10.0%")
-                is_percentage = "%" in field_data_text
-
-                # Removes thousands marker
-                value = field_data_text.replace(",", "")
-
-                # Multiplier for value based on suffix symbol
-                multiplier = decimal.Decimal("1.0")
-
-                # All multiplier symbols and their values
-                multiplier_suffixes = {
-                    "K": decimal.Decimal(1_000),
-                    "M": decimal.Decimal(1_000_000),
-                    "B": decimal.Decimal(1_000_000_000),
-                    "T": decimal.Decimal(1_000_000_000_000),
-                }
-
-                # Matches any multiplier suffix symbol
-                match = re.search(
-                    f"([{''.join(multiplier_suffixes.keys())}])$",
-                    value,
-                    re.IGNORECASE,
-                )
-
-                # Updates multiplier and removes it from the value
-                if match:
-                    multiplier = multiplier_suffixes[match.group(1).upper()]
-                    value = value[:-1]
-
-                # Filters characters inside the value
-                value = re.sub(r"[^0-9.\-+]", "", value)
-
-                # Parses the value
-                if value:
-                    try:
-                        result = decimal.Decimal(value)
-                    except ValueError, TypeError:
-                        pass
-                    else:
-                        # Applies multiplier and percentage adjustment
-                        result *= multiplier
-                        if is_percentage:
-                            result /= decimal.Decimal("100.0")
-                        field_data = result
-
-            elif field_type is datetime.datetime:
-                field_data = datetime.datetime.fromisoformat(field_data_text)
-
-            elif field_type is datetime.date:
-                field_data = datetime.date.fromisoformat(field_data_text)
-
-            else:
-                # Unsupported type inside the section model
-                msg = (
-                    f"Unsupported parsing type "
-                    f"'{getattr(field_type, '__name__', str(field_type))}' encountered for "
-                    f"field '{field_name}' in model '{section_type.__name__}'. Could "
-                    f"not convert raw string value: {field_data_text!r}."
-                )
-                raise TypeError(msg)
-
+            # Registers field data
             section_data[field_name] = field_data
 
         return section_type.model_validate(section_data)
+
+    @staticmethod
+    async def __extract_field_text(
+        container: playwright.async_api.Locator,
+        field_metadata: QuoteSectionFieldMetadataDTO,
+    ) -> str | None:
+        field_data_text: str | None = None
+
+        # Executes the selected search method for this field
+        match field_metadata.search_method:
+            case QuoteSectionFieldSearchMethods.XPATH:
+                # Goes to section's XPath and retrieve data
+                field_data_text = await container.locator(
+                    f"xpath={field_metadata.label}",
+                ).text_content()
+
+            case QuoteSectionFieldSearchMethods.SPLIT_LINES:
+                # Gets inner text and converts to lines
+                inner_text = await container.inner_text()
+                lines = [line for line in inner_text.splitlines() if line]
+
+                for i in range(len(lines) - 1):
+                    # Grabs the next line if label is matched
+                    if lines[i] == field_metadata.label:
+                        field_data_text = lines[i + 1].strip()
+                        break
+
+        return field_data_text
+
+    @staticmethod
+    def __apply_regex_in_field(
+        field_data_text: str,
+        field_metadata: QuoteSectionFieldMetadataDTO,
+    ) -> str | None:
+        # Doesn't apply regex into data if a pattern is not defined in the metadata
+        if field_metadata.regex_pattern is None:
+            return field_data_text
+
+        match = re.search(field_metadata.regex_pattern, field_data_text)
+
+        # Couldn't match any data for this field
+        if not match:
+            return None
+
+        matched_chunks: list[str]
+
+        # If no custom ordering was requested, then use the entire regex match
+        if field_metadata.regex_order is None:
+            matched_chunks = [match.group()]
+
+        # Specific group ordering was requested
+        else:
+            # All matched named groups
+            named_groups = match.groupdict()
+
+            # Extract matched chunks in the specified order
+            matched_chunks = [
+                named_groups[group_name] or ""
+                for group_name in field_metadata.regex_order
+                if group_name in named_groups
+            ]
+
+        # Executes the post regex script
+        matched_chunks = list(field_metadata.post_regex(matched_chunks))
+
+        # Join chunks using the designated separator
+        return field_metadata.separator.join(matched_chunks)
+
+    @staticmethod
+    # IGNORE: Function is returning type `Any` to facilitate
+    # implementation of new parsing types; and, there is a strong
+    # validation with the `pydantic` model validation in a next step
+    def __parse_data_in_field(
+        field_data_text: str,
+        field_type: type[typing.Any],
+    ) -> typing.Any | None:  # noqa: ANN401
+        # Parsed field data
+        field_data: typing.Any | None = None
+
+        # Parses field data based on expected type
+        if field_type is str:
+            field_data = field_data_text
+
+        elif field_type is decimal.Decimal:
+            # Checks if value is a percentage value (e.g. "10.0%")
+            is_percentage = "%" in field_data_text
+
+            # Removes thousands marker
+            value = field_data_text.replace(",", "")
+
+            # Multiplier for value based on suffix symbol
+            multiplier = decimal.Decimal("1.0")
+
+            # All multiplier symbols and their values
+            multiplier_suffixes = {
+                "K": decimal.Decimal(1_000),
+                "M": decimal.Decimal(1_000_000),
+                "B": decimal.Decimal(1_000_000_000),
+                "T": decimal.Decimal(1_000_000_000_000),
+            }
+
+            # Matches any multiplier suffix symbol
+            match = re.search(
+                f"([{''.join(multiplier_suffixes.keys())}])$",
+                value,
+                re.IGNORECASE,
+            )
+
+            # Updates multiplier and removes it from the value
+            if match:
+                multiplier = multiplier_suffixes[match.group(1).upper()]
+                value = value[:-1]
+
+            # Filters characters inside the value
+            value = re.sub(r"[^0-9.\-+]", "", value)
+
+            # Parses the value
+            if value:
+                try:
+                    result = decimal.Decimal(value)
+                except ValueError, TypeError:
+                    pass
+                else:
+                    # Applies multiplier and percentage adjustment
+                    result *= multiplier
+                    if is_percentage:
+                        result /= decimal.Decimal("100.0")
+                    field_data = result
+
+        elif field_type is datetime.datetime:
+            field_data = datetime.datetime.fromisoformat(field_data_text)
+
+        elif field_type is datetime.date:
+            field_data = datetime.date.fromisoformat(field_data_text)
+
+        else:
+            # Unsupported type inside the section model
+            msg = (
+                f"Unsupported parsing type "
+                f"'{getattr(field_type, '__name__', str(field_type))}' encountered. "
+                f"Could not convert raw string value: {field_data_text!r}."
+            )
+            raise TypeError(msg)
+
+        return field_data
