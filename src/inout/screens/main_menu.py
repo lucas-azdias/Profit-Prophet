@@ -10,6 +10,7 @@ import typing
 
 import pyfiglet
 from textual import on
+from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Button, Static
 
@@ -27,6 +28,12 @@ class MainMenu(UserScreen):
     """
 
     TITLE = "Main Menu"
+
+    BINDINGS: typing.ClassVar = [
+        *UserScreen.BINDINGS,
+        Binding("up", "app.focus_previous", "Previous", priority=True),
+        Binding("down", "app.focus_next", "Next", priority=True),
+    ]
 
     CSS = """
     .screen {

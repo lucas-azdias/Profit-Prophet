@@ -10,7 +10,6 @@ and global keyboard bindings.
 import typing
 
 from textual.app import App
-from textual.binding import Binding
 
 from src.finance.finance_manager import FinanceManager
 from src.inout.screens.allocation_menu import AllocationMenu
@@ -45,13 +44,6 @@ class UserInterface(App[None]):
         "crud": CrudMenu,
         "alloc": AllocationMenu,
     }
-
-    BINDINGS: typing.ClassVar = [
-        Binding("up", "app.focus_previous", "Previous"),
-        Binding("left", "app.focus_previous", "Previous"),
-        Binding("down", "app.focus_next", "Next"),
-        Binding("right", "app.focus_next", "Next"),
-    ]
 
     DEFAULT_CSS = """
     .screen {
