@@ -25,6 +25,7 @@ from src.inout.user_screen import UserScreen
 
 if typing.TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.events import Key
     from textual.widget import Widget
 
     from src.database.model import Model
@@ -155,7 +156,45 @@ class CrudMenu(UserScreen):
         model = self.__find_current_model(event.pane, "tab-")
 
         # Runs worker that populates data table with database data
-        self.run_worker(self.__load_data_table(model))
+        self.run_worker(self.__load_data_table(model), exclusive=True)
+
+    def on_key(self, event: Key) -> None:
+        """Handle key press events.
+
+        Args:
+            event (Key):
+                Event generated when a key is pressed.
+
+        """
+        # Queries for the current tab
+        tabs = self.query_one(TabbedContent)
+        current_tab = tabs.get_pane(tabs.active)
+
+        # Finds the current model
+        model = self.__find_current_model(current_tab, "tab-")
+
+        # Gets the select widget
+        select = typing.cast(
+            "Select[CrudSelectValues]",
+            self.query_one(f"#select-{model.__tablename__}", Select),
+        )
+
+        match event.key:
+            case "ctrl+a":
+                select.value = CrudSelectValues.ADD
+            case "ctrl+e":
+                select.value = CrudSelectValues.EDIT
+            case "ctrl+d":
+                select.value = CrudSelectValues.DELETE
+            case "ctrl+o":
+                self.notify("Executing operation...")
+                button = self.query_one(
+                    f"#button-confirm-{model.__tablename__}",
+                    Button,
+                )
+                button.press()
+            case _:
+                pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events.
@@ -184,11 +223,11 @@ class CrudMenu(UserScreen):
         # Matches the selected action and executes it
         match select.value:
             case CrudSelectValues.ADD:
-                self.run_worker(self.__add_instance(model))
+                self.run_worker(self.__add_instance(model), exclusive=True)
             case CrudSelectValues.EDIT:
-                self.run_worker(self.__edit_instance(model))
+                self.run_worker(self.__edit_instance(model), exclusive=True)
             case CrudSelectValues.DELETE:
-                self.run_worker(self.__delete_instance(model))
+                self.run_worker(self.__delete_instance(model), exclusive=True)
             case _:
                 msg = "Select an operation first"
                 self.notify(msg, severity="warning")
@@ -209,7 +248,7 @@ class CrudMenu(UserScreen):
         model = self.__find_current_model(current_tab, "tab-")
 
         # Clears the input and reloads data in the table
-        self.run_worker(self.__refresh_data(model))
+        self.run_worker(self.__refresh_data(model), exclusive=True)
 
     @staticmethod
     def __parse_bool(value: str) -> bool:
