@@ -13,6 +13,7 @@ from src.config.config_loader import ConfigLoader
 from src.database.database import Database
 from src.inout.logger import Logger
 from src.inout.user_interface import UserInterface
+from src.scrapers.browser_engine import BrowserEngine
 
 
 async def main() -> None:
@@ -27,8 +28,16 @@ async def main() -> None:
     database = Database(config.database_url, config.max_database_conn_retries, logger)
     await database.start()
 
+    # Starts browser engine
+    browser_engine = BrowserEngine(logger)
+    await browser_engine.launch()
+
     # Starts user interface
-    await UserInterface(database, logger).run_async()
+    await UserInterface(database, logger, browser_engine).run_async()
+
+    # Closes instances
+    await database.close()
+    await browser_engine.dispatch()
 
 
 if __name__ == "__main__":

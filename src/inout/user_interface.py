@@ -25,6 +25,7 @@ if typing.TYPE_CHECKING:
     from src.database.database import Database
     from src.inout.logger import Logger
     from src.inout.user_screen import UserScreen
+    from src.scrapers.browser_engine import BrowserEngine
 
 
 class UserInterface(App[None]):
@@ -66,6 +67,7 @@ class UserInterface(App[None]):
         self,
         database: Database,
         logger: Logger,
+        browser_engine: BrowserEngine,
         *,
         driver_class: type[Driver] | None = None,
         css_path: CSSPathType | None = None,
@@ -82,6 +84,11 @@ class UserInterface(App[None]):
             logger (Logger):
                 Logger instance used to record application events and
                 diagnostics.
+
+            browser_engine (BrowserEngine):
+                Browser automation engine responsible for managing the Playwright
+                lifecycle, browser instance, and creation of isolated browser
+                contexts used by scraping operations.
 
             driver_class (type[Driver] | None):
                 Optional Textual driver implementation used to run the
