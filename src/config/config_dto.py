@@ -34,3 +34,9 @@ class ConfigDTO(BaseDTO):
     database_url: sqlalchemy.engine.URL
     logs_folder: pathlib.Path
     max_database_conn_retries: int
+
+    # Enable arbitrary types to prevent Pydantic from attempting schema
+    # generation for non-serializable runtime objects
+    # (e.g. `sqlalchemy.engine.URL`)
+    model_config = BaseDTO.model_config.copy()
+    model_config["arbitrary_types_allowed"] = True
