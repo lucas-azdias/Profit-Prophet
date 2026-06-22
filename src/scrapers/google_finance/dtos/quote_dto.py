@@ -15,8 +15,10 @@ import pydantic
 from src.dtos.base_dto import BaseDTO
 
 if typing.TYPE_CHECKING:
-    from src.scrapers.google_finance.dtos.quote_section_header_dto import QuoteSectionHeaderDTO
-    from src.scrapers.google_finance.dtos.quote_section_overview_dto import QuoteSectionOverviewDTO
+    from src.scrapers.google_finance.dtos.quote_sections_dto import (
+        QuoteSectionHeaderDTO,
+        QuoteSectionOverviewDTO,
+    )
 
 
 class QuoteSectionMetadataDTO(BaseDTO):

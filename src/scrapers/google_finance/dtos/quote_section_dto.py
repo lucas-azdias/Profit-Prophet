@@ -10,15 +10,12 @@ DOM structure and transform raw page content into strongly typed DTOs.
 """
 
 import enum
+import re
 import typing
 
 import pydantic
 
 from src.dtos.base_dto import BaseDTO
-
-if typing.TYPE_CHECKING:
-    import collections.abc
-    import re
 
 
 class QuoteSectionFieldSearchMethods(enum.Enum):
@@ -76,13 +73,11 @@ class QuoteSectionFieldMetadataDTO(BaseDTO):
 
     search_method: QuoteSectionFieldSearchMethods
     label: str
-    regex_pattern: re.Pattern[str] | None = pydantic.Field(default=None)
-    regex_order: collections.abc.Sequence[str] | None = pydantic.Field(default=None)
+    regex_pattern: re.Pattern[str] = pydantic.Field(default=re.compile(r".*"))
+    regex_order: typing.Sequence[str] | None = pydantic.Field(default=None)
     separator: str = pydantic.Field(default=" ")
-    post_regex: typing.Callable[[collections.abc.Sequence[str]], collections.abc.Sequence[str]] = (
-        pydantic.Field(
-            default=lambda x: x,
-        )
+    post_regex: typing.Callable[[typing.Sequence[str]], typing.Sequence[str]] = pydantic.Field(
+        default=lambda x: x,
     )
 
 

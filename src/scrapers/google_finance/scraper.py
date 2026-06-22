@@ -8,11 +8,14 @@ extracts structured information from predefined sections, and converts the
 raw page content into strongly typed DTO models.
 """
 
+import contextlib
 import datetime
 import decimal
 import re
 import typing
 import unicodedata
+
+import playwright.async_api
 
 from src.scrapers.google_finance.dtos.quote_dto import (
     QuoteDTO,
@@ -24,10 +27,12 @@ from src.scrapers.google_finance.dtos.quote_section_dto import (
     QuoteSectionFieldSearchMethods,
 )
 
+# IGNORE: It is necessary to import all sections' models
+# for the model rebuild
+from src.scrapers.google_finance.dtos.quote_sections_dto import *  # noqa: F403
+
 if typing.TYPE_CHECKING:
     import types
-
-    import playwright.async_api
 
 
 class Scraper:
@@ -66,6 +71,11 @@ class Scraper:
         """
         self.__context: playwright.async_api.BrowserContext | None = context
         self.__page: playwright.async_api.Page | None = None
+
+        # Rebuilds the quote's models to solve imports (aka. `ForwardRef`)
+        QuoteDTO.model_rebuild(_types_namespace=globals())
+
+        self.__model_fields = QuoteDTO.model_fields
 
     async def __aenter__(self) -> typing.Self:
         """Create a page and enter a scraping session.
@@ -138,24 +148,35 @@ class Scraper:
             Structured quote data for the requested ticker.
 
         Raises:
+            TimeoutError:
+                If webpage does not finish loading within the configured
+                timeout period.
+
             TypeError:
                 If the quote model or one of its section models contains invalid
                 metadata or unsupported field types.
 
         """
-        # Loads ticker URL
-        await self.__launched_page.goto(
-            f"{self.BASE_URL}/{ticker}?hl=en",
-            wait_until="domcontentloaded",
-            timeout=60000,
-        )
+        try:
+            # Loads ticker URL
+            await self.__launched_page.goto(
+                f"{self.BASE_URL}/{ticker}?hl=en",
+                wait_until="domcontentloaded",
+                timeout=5000,
+            )
+        except playwright.async_api.TimeoutError:
+            msg = f"Timed out while loading Google Finance quote page for ticker '{ticker}'"
+            raise TimeoutError(msg) from None
 
-        # Waits for page to load completly with a manually selected event
-        await self.__launched_page.wait_for_event(
-            "response",
-            predicate=lambda response: response.url.endswith("/part_00000000.ts") and response.ok,
-            timeout=10000,
-        )
+        with contextlib.suppress(playwright.async_api.TimeoutError):
+            # Waits for page to load completly with a manually selected event
+            await self.__launched_page.wait_for_event(
+                "response",
+                predicate=lambda response: (
+                    response.url.endswith("/part_00000000.ts") and response.ok
+                ),
+                timeout=5000,
+            )
 
         # All quote's sections filled with data
         quote_data: dict[str, QuoteSectionDTO] = {}
@@ -164,7 +185,7 @@ class Scraper:
         ticker_name = "ticker"
 
         # Builds all sections
-        for section_name, section_field in QuoteDTO.model_fields.items():
+        for section_name, section_field in self.__model_fields.items():
             # Skips ticker field
             if section_name == ticker_name:
                 continue
@@ -296,10 +317,6 @@ class Scraper:
         field_data_text: str,
         field_metadata: QuoteSectionFieldMetadataDTO,
     ) -> str | None:
-        # Doesn't apply regex into data if a pattern is not defined in the metadata
-        if field_metadata.regex_pattern is None:
-            return field_data_text
-
         match = re.search(field_metadata.regex_pattern, field_data_text)
 
         # Couldn't match any data for this field
