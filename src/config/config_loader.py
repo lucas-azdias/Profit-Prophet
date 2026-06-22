@@ -70,7 +70,7 @@ class ConfigLoader:
         )
 
         # Rebuilds the config model to solve imports (aka. `ForwardRef`)
-        ConfigDTO.model_rebuild(_types_namespace=globals(), raise_errors=False)
+        ConfigDTO.model_rebuild(_types_namespace=globals())
 
         # All user configurations saved
         self.__config = ConfigDTO(**vars(self.__parser.parse_args()))

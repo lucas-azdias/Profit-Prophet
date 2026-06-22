@@ -73,6 +73,33 @@ class MainMenu(UserScreen):
                 yield Button("Edit data", id="button-push-crud", classes="button button-push")
                 yield Button("Exit", id="button-exit", classes="button")
 
+    @typing.override
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Intercept and optionally block an action before it is executed.
+
+        This method is called by Textual before dispatching an action.
+        It allows the screen to approve, deny, or defer handling of actions
+        triggered by key bindings or programmatic calls.
+
+        Args:
+            action (str):
+                The name of the action being requested (e.g. "go_back").
+
+            parameters (tuple[object, ...]):
+                A tuple of positional arguments supplied to the action handler.
+
+        Returns:
+            bool | None:
+                - True: explicitly allow the action;
+                - False: block the action;
+                - None: defer decision to the next handler in the chain.
+
+        """
+        # Blocks "go_back" action
+        if action == "go_back":
+            return False
+        return super().check_action(action, parameters)
+
     @on(Button.Pressed, ".button-push")
     def handle_push_screen(self, event: Button.Pressed) -> None:
         """Handle navigation button presses and push the corresponding screen.

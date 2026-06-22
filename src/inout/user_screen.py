@@ -11,6 +11,7 @@ strongly typed :class:`UserInterface`.
 import abc
 import typing
 
+from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header
 
@@ -32,6 +33,10 @@ class UserScreen(Screen[None]):
     provide access to application-specific functionality with proper
     static typing.
     """
+
+    BINDINGS: typing.ClassVar = [
+        Binding("backspace", "go_back", "Go back"),
+    ]
 
     @property
     @typing.override
@@ -55,3 +60,11 @@ class UserScreen(Screen[None]):
                 footer.
 
         """
+
+    def action_go_back(self) -> None:
+        """Navigate back to the previous screen if possible."""
+        # Only pop if there is something to go back to
+        if len(self.app.screen_stack) <= 1:
+            return
+
+        self.app.pop_screen()
