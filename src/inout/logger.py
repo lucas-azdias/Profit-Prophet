@@ -56,6 +56,7 @@ class Logger:
     def log(
         self,
         msg: str,
+        *,
         msg_type: typing.Literal["info", "debug", "warning", "error"] = "info",
     ) -> None:
         """Record a message in the log file.

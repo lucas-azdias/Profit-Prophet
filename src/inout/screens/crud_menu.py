@@ -158,7 +158,7 @@ class CrudMenu(UserScreen):
         self.run_worker(self.__load_data_table(model))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events from the main menu.
+        """Handle button press events.
 
         Args:
             event (Button.Pressed):

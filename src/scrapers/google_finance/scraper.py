@@ -8,7 +8,6 @@ extracts structured information from predefined sections, and converts the
 raw page content into strongly typed DTO models.
 """
 
-import contextlib
 import datetime
 import decimal
 import re
@@ -33,6 +32,8 @@ from src.scrapers.google_finance.dtos.quote_sections_dto import *  # noqa: F403
 
 if typing.TYPE_CHECKING:
     import types
+
+    from src.inout.logger import Logger
 
 
 class Scraper:
@@ -59,6 +60,7 @@ class Scraper:
     def __init__(
         self,
         context: playwright.async_api.BrowserContext,
+        logger: Logger,
     ) -> None:
         """Initialize a Google Finance scraper instance.
 
@@ -68,9 +70,13 @@ class Scraper:
                 The context must remain valid for the entire lifetime of the
                 scraper instance.
 
+            logger (Logger):
+                Logger used to record scraper events, warnings, and errors.
+
         """
         self.__context: playwright.async_api.BrowserContext | None = context
         self.__page: playwright.async_api.Page | None = None
+        self.__logger = logger
 
         # Rebuilds the quote's models to solve imports (aka. `ForwardRef`)
         QuoteDTO.model_rebuild(_types_namespace=globals())
@@ -168,7 +174,7 @@ class Scraper:
             msg = f"Timed out while loading Google Finance quote page for ticker '{ticker}'"
             raise TimeoutError(msg) from None
 
-        with contextlib.suppress(playwright.async_api.TimeoutError):
+        try:
             # Waits for page to load completly with a manually selected event
             await self.__launched_page.wait_for_event(
                 "response",
@@ -176,6 +182,12 @@ class Scraper:
                     response.url.endswith("/part_00000000.ts") and response.ok
                 ),
                 timeout=5000,
+            )
+        except playwright.async_api.TimeoutError:
+            self.__logger.log(
+                f"Scraper '{self.__class__.__name__}' got timeouted when waiting "
+                f"for event in '{ticker}' page",
+                msg_type="warning",
             )
 
         # All quote's sections filled with data
