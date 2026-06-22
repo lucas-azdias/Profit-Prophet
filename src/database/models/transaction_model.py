@@ -8,6 +8,7 @@ transaction performed for an asset.
 
 # IGNORE: Required at runtime because SQLAlchemy resolves Mapped annotations
 import datetime  # noqa: TC003
+import decimal  # noqa: TC003
 import typing
 
 import sqlalchemy
@@ -48,7 +49,7 @@ class TransactionModel(Base, Model):
     __plural__ = "transactions"
 
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
-    price: Mapped[float] = mapped_column(sqlalchemy.Float)
+    price: Mapped[decimal.Decimal] = mapped_column(sqlalchemy.Numeric(20, 8))
     quantity: Mapped[int] = mapped_column(sqlalchemy.Integer)
     done_at: Mapped[datetime.datetime] = mapped_column(sqlalchemy.DateTime(timezone=True))
 
