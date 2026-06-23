@@ -16,8 +16,10 @@ import enum
 import typing
 
 import sqlalchemy
+from textual import on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import Key
 from textual.widgets import Button, DataTable, Input, Rule, Select, TabbedContent, TabPane
 
 from src.database.base import Base
@@ -25,7 +27,6 @@ from src.inout.user_screen import UserScreen
 
 if typing.TYPE_CHECKING:
     from textual.app import ComposeResult
-    from textual.events import Key
     from textual.widget import Widget
 
     from src.database.model import Model
@@ -142,7 +143,8 @@ class CrudMenu(UserScreen):
                     yield Rule(line_style="solid", orientation="horizontal")
                     yield DataTable[str](id=f"data-table-{model.__tablename__}", cursor_type="row")
 
-    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+    @on(TabbedContent.TabActivated)
+    def handle_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         """Load data for the newly activated tab.
 
         Args:
@@ -158,7 +160,46 @@ class CrudMenu(UserScreen):
         # Runs worker that populates data table with database data
         self.run_worker(self.__load_data_table(model), exclusive=True)
 
-    def on_key(self, event: Key) -> None:
+    @on(Button.Pressed)
+    def handle_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events.
+
+        Args:
+            event (Button.Pressed):
+                Event generated when a button is pressed.
+
+        """
+        button_confirm_prefix = "button-confirm-"
+
+        # Checks if it is the confirmation button
+        if not event.button.id or not event.button.id.startswith(button_confirm_prefix):
+            self.app.logger.log("Unknown button was pressed and ignored", msg_type="warning")
+            return
+
+        # Finds the current model
+        model = self.__find_current_model(event.button, button_confirm_prefix)
+
+        # Gets the select element
+        select = typing.cast(
+            "Select[CrudSelectValues]",
+            self.query_one(f"#select-{model.__tablename__}", Select),
+        )
+
+        # Matches the selected action and executes it
+        match select.value:
+            case CrudSelectValues.ADD:
+                self.run_worker(self.__add_instance(model), exclusive=True)
+            case CrudSelectValues.EDIT:
+                self.run_worker(self.__edit_instance(model), exclusive=True)
+            case CrudSelectValues.DELETE:
+                self.run_worker(self.__delete_instance(model), exclusive=True)
+            case _:
+                msg = "Select an operation first"
+                self.notify(msg, severity="warning")
+                self.app.logger.log(msg, msg_type="warning")
+
+    @on(Key)
+    def handle_key_pressed(self, event: Key) -> None:
         """Handle key press events.
 
         Args:
@@ -195,43 +236,6 @@ class CrudMenu(UserScreen):
                 button.press()
             case _:
                 pass
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events.
-
-        Args:
-            event (Button.Pressed):
-                Event generated when a button is pressed.
-
-        """
-        button_confirm_prefix = "button-confirm-"
-
-        # Checks if it is the confirmation button
-        if not event.button.id or not event.button.id.startswith(button_confirm_prefix):
-            self.app.logger.log("Unknown button was pressed and ignored", msg_type="warning")
-            return
-
-        # Finds the current model
-        model = self.__find_current_model(event.button, button_confirm_prefix)
-
-        # Gets the select element
-        select = typing.cast(
-            "Select[CrudSelectValues]",
-            self.query_one(f"#select-{model.__tablename__}", Select),
-        )
-
-        # Matches the selected action and executes it
-        match select.value:
-            case CrudSelectValues.ADD:
-                self.run_worker(self.__add_instance(model), exclusive=True)
-            case CrudSelectValues.EDIT:
-                self.run_worker(self.__edit_instance(model), exclusive=True)
-            case CrudSelectValues.DELETE:
-                self.run_worker(self.__delete_instance(model), exclusive=True)
-            case _:
-                msg = "Select an operation first"
-                self.notify(msg, severity="warning")
-                self.app.logger.log(msg, msg_type="warning")
 
     def action_refresh_data(self) -> None:
         """Refresh the currently displayed model data.

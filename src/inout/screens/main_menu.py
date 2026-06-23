@@ -108,7 +108,7 @@ class MainMenu(UserScreen):
         return super().check_action(action, parameters)
 
     @on(Button.Pressed, ".button-push")
-    def handle_push_screen(self, event: Button.Pressed) -> None:
+    def handle_button_push(self, event: Button.Pressed) -> None:
         """Handle navigation button presses and push the corresponding screen.
 
         This handler processes all buttons with the `.button-push` CSS class,
@@ -155,7 +155,7 @@ class MainMenu(UserScreen):
         self.app.push_screen(screen_name)
 
     @on(Button.Pressed, "#button-exit")
-    def handle_exit(self) -> None:
+    def handle_button_exit(self) -> None:
         """Handle exiting the application.
 
         Displays a notification and logs the exit event, then schedules

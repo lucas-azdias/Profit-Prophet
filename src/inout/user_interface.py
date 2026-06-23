@@ -9,7 +9,9 @@ and global keyboard bindings.
 
 import typing
 
+from textual import on
 from textual.app import App
+from textual.events import Mount
 
 from src.finance.finance_manager import FinanceManager
 from src.inout.screens.allocation_menu import AllocationMenu
@@ -101,7 +103,7 @@ class UserInterface(App[None]):
         super().__init__(driver_class, css_path, watch_css, ansi_color)
         self.__database = database
         self.__logger = logger
-        self.__finance_manager = FinanceManager(self.__database)
+        self.__finance_manager = FinanceManager(self.__database, browser_engine, self.__logger)
 
     @property
     def logger(self) -> Logger:
@@ -136,6 +138,11 @@ class UserInterface(App[None]):
         """
         return self.__database.get_session()
 
-    def on_mount(self) -> None:
+    @on(Mount)
+    def handle_mount(self) -> None:
         """Display the main menu when the application starts."""
+        # Starts finance manager
+        self.run_worker(self.__finance_manager.start())
+
+        # Installs main screen
         self.push_screen("main")
