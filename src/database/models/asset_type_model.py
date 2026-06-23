@@ -6,6 +6,8 @@ This module defines the :class:`AssetTypeModel` entity, which represents a categ
 of assets within a portfolio.
 """
 
+# IGNORE: Required at runtime because SQLAlchemy resolves Mapped annotations
+import decimal  # noqa: TC003
 import typing
 
 import sqlalchemy
@@ -60,7 +62,7 @@ class AssetTypeModel(Base, Model):
 
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(sqlalchemy.String)
-    proportion: Mapped[int] = mapped_column(sqlalchemy.Integer)
+    proportion: Mapped[decimal.Decimal] = mapped_column(sqlalchemy.Numeric(20, 8))
     is_unitary_asset: Mapped[bool] = mapped_column(sqlalchemy.Boolean, default=True)
     is_question_scored: Mapped[bool] = mapped_column(sqlalchemy.Boolean, default=False)
 
