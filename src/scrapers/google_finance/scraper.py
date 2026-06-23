@@ -8,6 +8,7 @@ extracts structured information from predefined sections, and converts the
 raw page content into strongly typed DTO models.
 """
 
+import contextlib
 import datetime
 import decimal
 import re
@@ -246,8 +247,15 @@ class Scraper:
 
         # Builds all section's data based on its metadata
         for field_name, field in section_type.model_fields.items():
-            # Goes to section's XPath
-            container = self.__launched_page.locator(f"xpath={xpath}")
+            # Sets the default value
+            section_data[field_name] = None
+
+            try:
+                # Goes to section's XPath
+                container = self.__launched_page.locator(f"xpath={xpath}")
+            except playwright.async_api.TimeoutError:
+                # Ignores it if timeout occurs
+                continue
 
             # Safely extract inner types from generic unions
             field_args: tuple[type[typing.Any], ...] = typing.get_args(field.annotation)
@@ -276,7 +284,6 @@ class Scraper:
 
             # No data was found for this field
             if field_data_text is None:
-                section_data[field_name] = None
                 continue
 
             # Normalizes data and removes invalid characters
@@ -285,7 +292,6 @@ class Scraper:
             # Applies regex into data if a pattern is defined in the metadata
             field_data_text = self.__apply_regex_in_field(field_data_text, field_metadata)
             if field_data_text is None:
-                section_data[field_name] = None
                 continue
 
             # Parses field data
@@ -301,15 +307,18 @@ class Scraper:
         container: playwright.async_api.Locator,
         field_metadata: QuoteSectionFieldMetadataDTO,
     ) -> str | None:
+        # Sets the default value
         field_data_text: str | None = None
 
         # Executes the selected search method for this field
         match field_metadata.search_method:
             case QuoteSectionFieldSearchMethods.XPATH:
-                # Goes to section's XPath and retrieve data
-                field_data_text = await container.locator(
-                    f"xpath={field_metadata.label}",
-                ).text_content()
+                # Ignores it if timeout occurs
+                with contextlib.suppress(playwright.async_api.TimeoutError):
+                    # Goes to section's XPath and retrieve data
+                    field_data_text = await container.locator(
+                        f"xpath={field_metadata.label}",
+                    ).text_content()
 
             case QuoteSectionFieldSearchMethods.SPLIT_LINES:
                 # Gets inner text and converts to lines
