@@ -34,7 +34,7 @@ revise = "uv run alembic revision --autogenerate -m"
 
 [tool.ruff]
 include = ["src/**"]
-exclude = ["src/database/alembic/versions", "src/database/alembic/script.py.mako"]
+extend-exclude = ["*.mako"]
 line-length = 100
 format.quote-style = "double"
 format.indent-style = "space"

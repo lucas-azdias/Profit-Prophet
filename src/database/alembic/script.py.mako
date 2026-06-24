@@ -1,21 +1,24 @@
-"""${message}
+# Copyright (C) 2026 Lucas Dias
+
+"""${message}.
 
 Revision ID: ${up_revision}
 Revises: ${down_revision | comma,n}
 Create Date: ${create_date}
-
 """
-from typing import Sequence, Union
 
-from alembic import op
+# IGNORE: Required at runtime because it is a Alembic script
+from collections.abc import Sequence  # noqa: TC003
+
 import sqlalchemy as sa
+from alembic import op
 ${imports if imports else ""}
 
-# revision identifiers, used by Alembic.
+# Revision identifiers
 revision: str = ${repr(up_revision)}
-down_revision: Union[str, Sequence[str], None] = ${repr(down_revision)}
-branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
-depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
+down_revision: str | Sequence[str] | None = ${repr(down_revision)}
+branch_labels: str | Sequence[str] | None = ${repr(branch_labels)}
+depends_on: str | Sequence[str] | None = ${repr(depends_on)}
 
 
 def upgrade() -> None:
