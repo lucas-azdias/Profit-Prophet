@@ -11,38 +11,31 @@ strongly typed :class:`UserInterface`.
 import abc
 import typing
 
+from textual import on
 from textual.binding import Binding
+from textual.events import Mount
 from textual.screen import Screen
 from textual.widgets import Footer, Header
+
+from src.inout.mixins import UserInterfaceMixin
 
 if typing.TYPE_CHECKING:
     from textual.app import ComposeResult
 
-    from src.inout.user_interface import UserInterface
 
-
-class UserScreen(Screen[None]):
+class UserScreen(UserInterfaceMixin, Screen[None]):
     """Base class for all application screens.
 
     This class provides a common layout consisting of a header, a body,
     and a footer. Subclasses must implement :meth:`compose_body` to
     define the screen-specific widgets displayed between the header and
     footer.
-
-    The :attr:`app` property is narrowed to :class:`UserInterface` to
-    provide access to application-specific functionality with proper
-    static typing.
     """
 
     BINDINGS: typing.ClassVar = [
-        Binding("backspace", "go_back", "Go back"),
+        Binding("backspace", "go_back", " Go back"),  # Needs an extra space for formatting purposes
+        Binding("escape", "unfocus_widget", "Unfocus"),
     ]
-
-    @property
-    @typing.override
-    def app(self) -> UserInterface:
-        # IGNORE: Ignored unknown generic type of `App` to allow type override
-        return typing.cast("UserInterface", super().app)  # pyright: ignore[reportUnknownMemberType]
 
     @typing.override
     def compose(self) -> ComposeResult:
@@ -61,6 +54,11 @@ class UserScreen(Screen[None]):
 
         """
 
+    @on(Mount)
+    def handle_mount(self) -> None:
+        """Remove focus from the currently focused widget on mount."""
+        self.call_after_refresh(lambda: self.app.set_focus(None))
+
     def action_go_back(self) -> None:
         """Navigate back to the previous screen if possible."""
         # Only pop if there is something to go back to
@@ -68,3 +66,7 @@ class UserScreen(Screen[None]):
             return
 
         self.app.pop_screen()
+
+    def action_unfocus_widget(self) -> None:
+        """Remove focus from the currently focused widget."""
+        self.app.set_focus(None)

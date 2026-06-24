@@ -52,7 +52,7 @@ class AssetModel(Base, Model):
 
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(sqlalchemy.String)
-    user_score: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=True, default=None)
+    user_score: Mapped[int | None] = mapped_column(sqlalchemy.Integer, nullable=True, default=None)
 
     asset_type_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey("asset_type.id"))
 

@@ -96,7 +96,7 @@ class BrowserEngine:
         """Create a new isolated browser context.
 
         Returns:
-            playwright.async_api.BrowserContext:
+            BrowserContext:
                 Newly created browser context.
 
         Raises:

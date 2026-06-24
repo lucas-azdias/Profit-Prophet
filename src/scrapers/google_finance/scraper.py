@@ -140,6 +140,47 @@ class Scraper:
 
         self.__page = None
 
+    async def is_valid_ticker(self, ticker: str) -> bool:
+        """Determine whether a ticker symbol exists on Google Finance.
+
+        Attempts to load the Google Finance quote page for the provided ticker
+        symbol and checks whether the page displays the standard "no match"
+        message returned for unknown instruments.
+
+        Any timeout encountered while loading the page or validating the
+        response is treated as a failed verification and results in False.
+
+        Args:
+            ticker (str):
+                Ticker symbol to validate.
+
+        Returns:
+            bool:
+                True if the ticker appears to exist on Google Finance;
+                otherwise False.
+
+        """
+        try:
+            # Loads ticker URL
+            await self.__launched_page.goto(
+                f"{self.BASE_URL}/{ticker}?hl=en",
+                wait_until="domcontentloaded",
+                timeout=2000,
+            )
+        except playwright.async_api.TimeoutError:
+            # If it times out, then it assumes it is not verifiable
+            return False
+
+        # Check for the presence of the error message
+        error_message = self.__launched_page.locator("text=We couldn't find any match")
+
+        try:
+            # Checks if the error message is visible
+            return not await error_message.is_visible(timeout=1000)
+        except playwright.async_api.TimeoutError:
+            # If it times out, then it assumes it is not verifiable
+            return False
+
     async def scrape_quote(self, ticker: str) -> QuoteDTO:
         """Retrieve and parse quote information for a ticker symbol.
 
@@ -152,7 +193,8 @@ class Scraper:
                 Financial instrument ticker symbol to scrape.
 
         Returns:
-            Structured quote data for the requested ticker.
+            QuoteDTO:
+                Structured quote data for the requested ticker.
 
         Raises:
             TimeoutError:
@@ -169,7 +211,7 @@ class Scraper:
             await self.__launched_page.goto(
                 f"{self.BASE_URL}/{ticker}?hl=en",
                 wait_until="domcontentloaded",
-                timeout=5000,
+                timeout=2000,
             )
         except playwright.async_api.TimeoutError:
             msg = f"Timed out while loading Google Finance quote page for ticker '{ticker}'"
@@ -179,9 +221,7 @@ class Scraper:
             # Waits for page to load completly with a manually selected event
             await self.__launched_page.wait_for_event(
                 "response",
-                predicate=lambda response: (
-                    response.url.endswith("/part_00000000.ts") and response.ok
-                ),
+                predicate=lambda response: response.url.endswith(".m3u8") and response.ok,
                 timeout=5000,
             )
         except playwright.async_api.TimeoutError:
@@ -250,12 +290,8 @@ class Scraper:
             # Sets the default value
             section_data[field_name] = None
 
-            try:
-                # Goes to section's XPath
-                container = self.__launched_page.locator(f"xpath={xpath}")
-            except playwright.async_api.TimeoutError:
-                # Ignores it if timeout occurs
-                continue
+            # Goes to section's XPath
+            container = self.__launched_page.locator(f"xpath={xpath}")
 
             # Safely extract inner types from generic unions
             field_args: tuple[type[typing.Any], ...] = typing.get_args(field.annotation)
@@ -318,11 +354,17 @@ class Scraper:
                     # Goes to section's XPath and retrieve data
                     field_data_text = await container.locator(
                         f"xpath={field_metadata.label}",
-                    ).text_content()
+                    ).text_content(timeout=1000)
 
             case QuoteSectionFieldSearchMethods.SPLIT_LINES:
-                # Gets inner text and converts to lines
-                inner_text = await container.inner_text()
+                # Ignores it if timeout occurs
+                try:
+                    # Gets inner text
+                    inner_text = await container.inner_text(timeout=1000)
+                except playwright.async_api.TimeoutError:
+                    return None
+
+                # Converts to lines
                 lines = [line for line in inner_text.splitlines() if line]
 
                 for i in range(len(lines) - 1):
