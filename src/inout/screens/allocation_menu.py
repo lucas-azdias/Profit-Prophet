@@ -21,7 +21,7 @@ from textual.events import Key, Mount, ScreenResume, ScreenSuspend
 from textual.types import NoSelection
 from textual.widgets import Button, DataTable, Input, Rule, Select
 
-from src.finance.positions.position import Position
+from src.finance.position import Position
 from src.inout.user_screen import UserScreen
 
 if typing.TYPE_CHECKING:
@@ -126,12 +126,8 @@ class AllocationMenu(UserScreen):
         :class:`Position` and creates a corresponding column in the data
         table.
         """
-        # Gets all columns in position based on property methods
-        columns = [
-            name
-            for name in Position.__dict__
-            if isinstance(getattr(Position, name, None), property)
-        ]
+        # Gets all columns in position
+        columns = Position.columns()
 
         # Gets the respective data table
         data_table = typing.cast("DataTable[str]", self.query_one("#data-table", DataTable))
