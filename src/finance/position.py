@@ -8,7 +8,6 @@ and current market price.
 """
 
 import decimal
-import functools
 import typing
 
 if typing.TYPE_CHECKING:
@@ -83,7 +82,7 @@ class Position:
         """
         return self.__model.asset_type.name
 
-    @functools.cached_property
+    @property
     def score(self) -> int:
         """Returns the position's asset score.
 
@@ -117,7 +116,7 @@ class Position:
         """
         return self.__current_price
 
-    @functools.cached_property
+    @property
     def average_price(self) -> decimal.Decimal | None:
         """Calculates the average acquisition price.
 
@@ -147,7 +146,7 @@ class Position:
 
         return total_cost / total_quantity
 
-    @functools.cached_property
+    @property
     def quantity(self) -> int:
         """Returns the quantity represented by the position.
 
@@ -163,7 +162,7 @@ class Position:
             return 1
         return self.__strategy.quantity(self)
 
-    @functools.cached_property
+    @property
     def value(self) -> decimal.Decimal:
         """Returns the current value of the position.
 
@@ -203,5 +202,4 @@ class Position:
             name
             for name in Position.__dict__
             if isinstance(getattr(Position, name, None), property)
-            if isinstance(getattr(Position, name, None), functools.cached_property)
         ]
