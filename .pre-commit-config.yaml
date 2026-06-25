@@ -8,7 +8,5 @@ repos:
       rev: v0.15.16
       hooks:
           - id: ruff-format
-            args: ["./src"]
-
           - id: ruff-check
-            args: ["./src", "--fix"]
+            args: ["--fix"]
