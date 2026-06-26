@@ -2,9 +2,9 @@
 
 """Textual application entry point and screen management.
 
-This module defines :class:`UserInterface`, the root Textual application
-responsible for managing screen navigation, database access, logging,
-and global keyboard bindings.
+This module defines `UserInterface`, the root Textual application responsible
+for managing screen navigation, database access, logging, and global keyboard
+bindings.
 """
 
 import typing

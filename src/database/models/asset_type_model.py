@@ -2,7 +2,7 @@
 
 """Asset type database model.
 
-This module defines the :class:`AssetTypeModel` entity, which represents a category
+This module defines the `AssetTypeModel` entity, which represents a category
 of assets within a portfolio.
 """
 

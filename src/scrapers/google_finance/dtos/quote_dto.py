@@ -43,8 +43,8 @@ class QuoteDTO(BaseDTO):
     """Represents a single Google Finance quote.
 
     All monetary values, ratios, percentages, and large numeric metrics
-    are stored as :class:`Decimal` instances for precision. And percentage
-    values are normalized to decimal fractions.
+    are stored as `Decimal` instances for precision. And percentage values
+    are normalized to decimal fractions.
 
     Datetime values are timezone-aware.
 

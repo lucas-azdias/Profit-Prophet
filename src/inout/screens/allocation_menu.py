@@ -2,9 +2,9 @@
 
 """Portfolio allocation generation screen.
 
-This module defines :class:`AllocationMenu`, a screen responsible for
-loading portfolio data, building portfolio positions, and generating
-allocation suggestions based on a user-provided investment amount.
+This module defines `AllocationMenu`, a screen responsible for loading
+portfolio data, building portfolio positions, and generating allocation
+suggestions based on a user-provided investment amount.
 
 Users can select a portfolio, enter an allocation value, and visualize
 the resulting allocation in a tabular format. Portfolio data can also be
@@ -122,9 +122,8 @@ class AllocationMenu(UserScreen):
     def handle_mount(self) -> None:
         """Initialize the allocation table.
 
-        Discovers all public allocation properties exposed by
-        :class:`Position` and creates a corresponding column in the data
-        table.
+        Discovers all public allocation properties exposed by `Position`
+        and creates a corresponding column in the data table.
         """
         # Gets all columns in position
         columns = Position.columns()

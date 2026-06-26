@@ -2,8 +2,8 @@
 
 """Transactions database model.
 
-This module defines the :class:`TransactionModel`, which represents a
-transaction performed for an asset.
+This module defines the `TransactionModel`, which represents a transaction
+performed for an asset.
 """
 
 # IGNORE: Required at runtime because SQLAlchemy resolves Mapped annotations

@@ -2,8 +2,8 @@
 
 """Score questions database model.
 
-This module defines the :class:`ScoreQuestionModel`, which represents a
-question used to evaluate investor preferences, risk tolerance, or suitability.
+This module defines the `ScoreQuestionModel`, which represents a question
+used to evaluate investor preferences, risk tolerance, or suitability.
 """
 
 import typing

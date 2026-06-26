@@ -2,9 +2,9 @@
 
 """Portfolio asset allocation proposal module.
 
-Provides the :class:`Allocation` class, which distributes an investment
-amount across portfolio positions according to asset type proportions
-and position scores.
+Provides the `Allocation` class, which distributes an investment amount
+across portfolio positions according to asset type proportions and position
+scores.
 """
 
 import collections

@@ -2,8 +2,8 @@
 
 """Playwright browser engine manager.
 
-This module provides :class:`BrowserEngine`, a thin wrapper around
-Playwright responsible for managing the lifecycle of a browser instance.
+This module provides `BrowserEngine`, a thin wrapper around Playwright
+responsible for managing the lifecycle of a browser instance.
 
 The engine owns both the Playwright runtime and the launched browser,
 providing methods to start and stop the browser and create isolated
@@ -22,7 +22,7 @@ class BrowserEngine:
     """Manage the lifecycle of a Playwright browser instance.
 
     The engine must be launched before creating contexts. Resources are
-    released through :meth:`BrowserEngine.dispatch`.
+    released through `BrowserEngine.dispatch`.
 
     """
 

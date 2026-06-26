@@ -2,10 +2,9 @@
 
 """Database connection and session management.
 
-This module defines :class:`Database`, which is responsible for
-initializing the SQLAlchemy engine, managing database sessions,
-verifying connectivity, and applying pending schema migrations during
-application startup.
+This module defines `Database`, which is responsible for initializing
+the SQLAlchemy engine, managing database sessions, verifying connectivity,
+and applying pending schema migrations during application startup.
 """
 
 import asyncio

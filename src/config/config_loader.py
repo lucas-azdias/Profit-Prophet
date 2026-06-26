@@ -2,11 +2,11 @@
 
 """Command-line configuration loading and parsing.
 
-This module provides the :class:`ConfigLoader` class, responsible for defining,
-parsing, and validating command-line arguments.
+This module provides the `ConfigLoader` class, responsible for defining, parsing,
+and validating command-line arguments.
 
-The loader converts user-supplied CLI options into a :class:`ConfigDTO` instance
-that encapsulates settings.
+The loader converts user-supplied CLI options into a `ConfigDTO` instance that
+encapsulates settings.
 
 It serves as the primary entry point for transforming command-line input into
 application configuration consumed by other components.
@@ -24,16 +24,16 @@ class ConfigLoader:
     """Command-line configuration loader.
 
     This class is responsible for defining CLI arguments, parsing user input,
-    and producing a validated immutable :class:`ConfigDTO` object used throughout
-    the application lifecycle.
+    and producing a validated immutable `ConfigDTO` object used throughout the
+    application lifecycle.
     """
 
     def __init__(self) -> None:
         """Initialize the command-line interface configuration.
 
         Creates the argument parser, processes command-line arguments supplied by
-        the user, and constructs a :class:`ConfigDTO` instance containing the
-        validated runtime configuration.
+        the user, and constructs a `ConfigDTO` instance containing the validated
+        runtime configuration.
         """
         # Argument parser for all parameters available for user via CLI
         self.__parser = argparse.ArgumentParser(

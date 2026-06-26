@@ -61,9 +61,9 @@ class Logger:
     ) -> None:
         """Record a message in the log file.
 
-        The message is written using the logging level specified by
-        :param:`msg_type`. Optionally, the message may also be displayed
-        through the application's console interface.
+        The message is written using the logging level specified by `msg_type`.
+        Optionally, the message may also be displayed through the application's
+        console interface.
 
         Args:
             msg (str):

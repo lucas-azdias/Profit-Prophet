@@ -2,8 +2,7 @@
 
 """Main menu screen for the user interface.
 
-This module defines :class:`MainMenu`, the application's primary
-navigation screen.
+This module defines `MainMenu`, the application's primary navigation screen.
 """
 
 import typing

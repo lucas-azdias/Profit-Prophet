@@ -15,14 +15,14 @@ if typing.TYPE_CHECKING:
 class UserInterfaceMixin:
     """Provide strongly-typed access to the application instance.
 
-    This mixin overrides the :attr:`app` property and narrows its type to
-    :class:`UserInterface`, allowing subclasses to access application-specific
+    This mixin overrides the `app` property and narrows its type to
+    `UserInterface`, allowing subclasses to access application-specific
     attributes and methods without additional casting.
     """
 
     @property
     def app(self) -> UserInterface:
-        """Return the application as a :class:UserInterface.
+        """Return the application as a `UserInterface`.
 
         Returns:
             UserInterface:

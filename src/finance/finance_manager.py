@@ -121,7 +121,7 @@ class FinanceManager:
         """Build derived portfolio data.
 
         This method triggers position calculations for every fetched
-        portfolio. It should be executed after :meth:`fetch_data`.
+        portfolio. It should be executed after `fetch_data`.
         """
         for portfolio in self.__fetched_portfolios.values():
             await portfolio.build_positions()

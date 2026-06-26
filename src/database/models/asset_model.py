@@ -2,8 +2,8 @@
 
 """Asset database model.
 
-This module defines :class:`AssetModel`, which represents an asset owned
-or tracked by the application.
+This module defines `AssetModel`, which represents an asset owned or
+tracked by the application.
 """
 
 import typing

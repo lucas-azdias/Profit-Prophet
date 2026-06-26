@@ -2,10 +2,10 @@
 
 """Base screen abstractions for the Textual user interface.
 
-This module defines :class:`UserScreen`, an abstract base class used by
-all application screens. It provides a common layout consisting of a
-header, body, and footer, and exposes the application instance as a
-strongly typed :class:`UserInterface`.
+This module defines `UserScreen`, an abstract base class used by all
+application screens. It provides a common layout consisting of a header,
+body, and footer, and exposes the application instance as a strongly
+typed `UserInterface`.
 """
 
 import abc
@@ -27,9 +27,8 @@ class UserScreen(UserInterfaceMixin, Screen[None]):
     """Base class for all application screens.
 
     This class provides a common layout consisting of a header, a body,
-    and a footer. Subclasses must implement :meth:`compose_body` to
-    define the screen-specific widgets displayed between the header and
-    footer.
+    and a footer. Subclasses must implement `compose_body` to define
+    the screen-specific widgets displayed between the header and footer.
     """
 
     BINDINGS: typing.ClassVar = [

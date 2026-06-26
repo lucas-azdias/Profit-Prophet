@@ -2,9 +2,9 @@
 
 """Portfolio database model.
 
-This module defines the :class:`PortfolioModel`, which represents an
-investment portfolio. A portfolio groups multiple asset types and serves
-as the top-level structure for asset allocation definitions.
+This module defines the `PortfolioModel`, which represents an investment
+portfolio. A portfolio groups multiple asset types and serves as the
+top-level structure for asset allocation definitions.
 """
 
 import typing

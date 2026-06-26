@@ -2,9 +2,9 @@
 
 """CRUD screen for managing database records.
 
-This module defines :class:`CrudMenu`, a generic database management
-screen that automatically discovers SQLAlchemy models and provides
-interfaces for creating, updating, deleting, and viewing records.
+This module defines `CrudMenu`, a generic database management screen
+that automatically discovers SQLAlchemy models and provides interfaces
+for creating, updating, deleting, and viewing records.
 
 Each registered model is displayed in its own tab, allowing users to
 perform CRUD operations through a common user interface without

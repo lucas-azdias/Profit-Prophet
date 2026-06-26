@@ -2,14 +2,12 @@
 
 """Base model contract for all database entities.
 
-This module defines :class:`Model`, a common base class used to enforce
-required metadata attributes across all SQLAlchemy models in the
-application.
+This module defines `Model`, a common base class used to enforce required
+metadata attributes across all SQLAlchemy models in the application.
 
-Every subclass must define both :attr:`__tablename__` and :attr:`__plural__`.
-These attributes are validated during class creation through
-``__init_subclass__`` to ensure a consistent interface for database and
-user-interface operations.
+Every subclass must define both `__tablename__` and `__plural__`. These
+attributes are validated during class creation through `__init_subclass__`
+to ensure a consistent interface for database and user-interface operations.
 """
 
 import typing
@@ -22,9 +20,9 @@ class Model:
     """Base class that defines required model metadata.
 
     All database models must inherit from this class and provide the
-    :attr:`__tablename__` and :attr:`__plural__` class attributes.
-    These values are used throughout the application for database
-    operations and user-interface generation.
+    `__tablename__` and `__plural__` class attributes. These values
+    are used throughout the application for database operations and
+    user-interface generation.
 
     Attributes:
         __tablename__ (str):
@@ -47,7 +45,7 @@ class Model:
         """Validate model metadata during subclass creation.
 
         Ensures that every subclass explicitly defines both
-        :attr:`__tablename__` and :attr:`__plural__`.
+        `__tablename__` and `__plural__`.
 
         Args:
             **kwargs (typing.Any):
@@ -56,10 +54,10 @@ class Model:
 
         Raises:
             TypeError:
-                If the subclass does not define :attr:`__tablename__`.
+                If the subclass does not define `__tablename__`.
 
             TypeError:
-                If the subclass does not define :attr:`__plural__`.
+                If the subclass does not define `__plural__`.
 
         """
         super().__init_subclass__(**kwargs)
