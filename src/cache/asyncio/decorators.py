@@ -24,43 +24,57 @@ if typing.TYPE_CHECKING:
     import collections.abc
 
 
-def __link_task_to_future[R_co](task: asyncio.Task[R_co], future: asyncio.Future[R_co]) -> None:
-    if task.cancelled():
-        future.cancel()
-        return
-
-    exception = task.exception()
-    if exception is not None:
-        future.set_exception(exception)
-        return
-
-    future.set_result(task.result())
-
-
-def __async_cache_get[K, **P, R_co](
+# IGNORE: The bigger amount of arguments is necessary
+# for simpler structure of code.
+def __async_cache_get[K, **P, R_co](  # noqa: PLR0913
     *,
     cache: collections.abc.MutableMapping[K, asyncio.Future[R_co]],
     key: K,
     fn: collections.abc.Callable[P, collections.abc.Coroutine[typing.Any, typing.Any, R_co]],
     args: tuple[typing.Any, ...],
     kwargs: dict[str, typing.Any],
+    cache_exceptions: bool,
 ) -> asyncio.Future[R_co]:
     try:
+        # If alrady exists a cached version, return it
         future = cache[key]
     except KeyError:
         future = None
 
-    # If alrady exists a cache, return it
+    # If alrady exists a linked pending future, return it
     if future is not None:
         return future
 
-    # Creates a new cache
+    # Creates a new task for this call
     loop = asyncio.get_event_loop()
     task = loop.create_task(fn(*args, **kwargs))
-
     future = loop.create_future()
-    task.add_done_callback(lambda t: __link_task_to_future(t, future))
 
+    # `done` callback for when future is concluded
+    def done(task: asyncio.Task[R_co]) -> None:
+        # Removes cancelled tasks from the cache
+        if task.cancelled() or isinstance(task.exception(), asyncio.CancelledError):
+            cache.pop(key, None)
+            future.cancel()
+            return
+
+        # Optionally discards failed tasks to allow future retries
+        exception = task.exception()
+        if exception is not None:
+            if not cache_exceptions:
+                cache.pop(key, None)
+
+            # Propagates the exception
+            future.set_exception(exception)
+            return
+
+        # Stores the successful result in the shared future
+        future.set_result(task.result())
+
+    # Adds `done` callback of future to task
+    task.add_done_callback(done)
+
+    # Returns the cached value
     with contextlib.suppress(ValueError):
         cache[key] = future
 
@@ -147,6 +161,7 @@ def async_cached[K, **P, R_co](
     lock: contextlib.AbstractContextManager[typing.Any] | None = None,
     *,
     info: bool = False,
+    cache_exceptions: bool = True,
 ) -> collections.abc.Callable[
     [collections.abc.Callable[P, collections.abc.Awaitable[R_co]]],
     __AsyncCachedCallable[P, R_co],
@@ -171,6 +186,12 @@ def async_cached[K, **P, R_co](
 
         info (bool):
             If True, raises NotImplementedError (not supported).
+
+        cache_exceptions (bool):
+            Whether Futures that complete with an exception should remain
+            cached. If False, failed Futures are removed from the cache,
+            allowing subsequent calls with the same key to retry the
+            computation. Defaults to True.
 
     Returns:
         Callable[[Callable[P, Awaitable[R_co]]], __AsyncCachedCallable[P, R_co]]:
@@ -206,6 +227,7 @@ def async_cached[K, **P, R_co](
                 fn=fn,
                 args=args,
                 kwargs=kwargs,
+                cache_exceptions=cache_exceptions,
             )
 
             if not future.done():
@@ -240,6 +262,8 @@ def async_cachedmethod[K, **P, R_co](
     key: collections.abc.Callable[..., K] = cachetools.keys.methodkey,
     lock: collections.abc.Callable[[typing.Any], contextlib.AbstractContextManager[typing.Any]]
     | None = None,
+    *,
+    cache_exceptions: bool = True,
 ) -> collections.abc.Callable[
     [collections.abc.Callable[P, collections.abc.Awaitable[R_co]]],
     __AsyncCachedMethodCallable[P, R_co],
@@ -262,6 +286,12 @@ def async_cachedmethod[K, **P, R_co](
 
         lock (Callable[[Any], AbstractContextManager[Any]] | None):
             Optional lock context manager factory. Not supported.
+
+        cache_exceptions (bool):
+            Whether Futures that complete with an exception should remain
+            cached. If False, failed Futures are removed from the cache,
+            allowing subsequent calls with the same key to retry the
+            computation. Defaults to True.
 
     Returns:
         Callable[[Callable[P, Awaitable[R_co]]], __AsyncCachedMethodCallable[P, R_co]]:
@@ -297,6 +327,7 @@ def async_cachedmethod[K, **P, R_co](
                 fn=fn,
                 args=args,
                 kwargs=kwargs,
+                cache_exceptions=cache_exceptions,
             )
 
             if not future.done():
