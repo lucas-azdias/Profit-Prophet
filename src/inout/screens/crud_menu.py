@@ -13,6 +13,7 @@ requiring model-specific screens.
 
 import datetime
 import enum
+import graphlib
 import typing
 
 import sqlalchemy
@@ -101,10 +102,7 @@ class CrudMenu(UserScreen):
 
     @typing.override
     def compose_body(self) -> ComposeResult:
-        self.__models: list[type[Model]] = sorted(
-            [mapper.class_ for mapper in Base.registry.mappers],
-            key=lambda x: x.__name__,
-        )
+        self.__models = self.__get_sorted_models_by_dependency()
 
         with VerticalScroll(classes="screen", can_focus=False), TabbedContent():
             for model in self.__models:
@@ -484,3 +482,73 @@ class CrudMenu(UserScreen):
         await self.__refresh_data(model)
 
         self.app.logger.log(f"Deleted '{model.__tablename__}' instance successfully")
+
+    @staticmethod
+    def __get_sorted_models_by_dependency() -> list[type[Model]]:
+        """Sort SQLAlchemy models in order of dependency.
+
+        It goes from least dependent on other models to most dependent.
+
+        Returns:
+            list[type[Model]]:
+                The sorted list of model classes.
+
+        Raises:
+            ValueError:
+                If a circular dependency is detected.
+
+        """
+        # Maps table names to their actual model classes
+        models: dict[str, type[Model]] = {
+            cls.class_.__table__.name: cls.class_
+            for cls in Base.registry.mappers
+            if hasattr(cls.class_, "__table__")
+        }
+
+        # Graph showing dependency between models
+        dependency_graph: dict[str, set[str]] = {}
+
+        # Builds the dependency graph
+        for name, model in models.items():
+            # Finds all tables that this table references via foreign keys
+            dependencies: set[str] = set()
+            for foreign_key in model.__table__.foreign_keys:
+                foreign_name = foreign_key.column.table.name
+
+                # Avoids self referencing loop
+                if foreign_name != name:
+                    dependencies.add(foreign_name)
+
+            # Adds dependencies in graphlib format
+            dependency_graph[name] = dependencies
+
+        # Performs a dynamic topological sort
+        sorter = graphlib.TopologicalSorter(dependency_graph)
+        try:
+            sorter.prepare()
+        except ValueError as e:
+            msg = f"Circular dependency was detected among models: {e}"
+            raise ValueError(msg) from None
+
+        # Models' names in topological order
+        ordered_names: list[str] = []
+
+        # Processes the graph level by level (generation by generation)
+        while sorter.is_active():
+            # Gets all nodes that have 0 remaining unresolved dependencies
+            current_level_nodes = list(sorter.get_ready())
+
+            # Breaks if no more unique level nodes
+            if not current_level_nodes:
+                break
+
+            # Sorts nodes at the current level
+            current_level_nodes.sort()
+
+            # Adds them to the final sequence and marks them as done in the sorter
+            for node in current_level_nodes:
+                ordered_names.append(node)
+                sorter.done(node)
+
+        # Returns model classes in topological order
+        return [models[name] for name in ordered_names if name in models]
