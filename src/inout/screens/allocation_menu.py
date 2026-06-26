@@ -290,4 +290,13 @@ class AllocationMenu(UserScreen):
             if not row:
                 continue
 
-            data_table.add_row(*[str(row[c]) for c in columns])
+            data_table.add_row(
+                *[
+                    (
+                        str(value.quantize(decimal.Decimal("0.000")))
+                        if isinstance(value := row[c], decimal.Decimal)
+                        else str(value)
+                    )
+                    for c in columns
+                ],
+            )
