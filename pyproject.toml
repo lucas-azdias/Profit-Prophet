@@ -41,6 +41,7 @@ format.quote-style = "double"
 format.indent-style = "space"
 lint.preview = true
 lint.select = ["ALL"]
+lint.ignore = ["D203", "D213"]
 
 [tool.pyright]
 include = ["src"]
