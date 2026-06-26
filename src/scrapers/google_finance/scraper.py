@@ -15,8 +15,10 @@ import re
 import typing
 import unicodedata
 
+import cachetools
 import playwright.async_api
 
+from src.cache.asyncio.decorators import async_cachedmethod
 from src.scrapers.google_finance.dtos.quote_dto import (
     QuoteDTO,
     QuoteSectionMetadataDTO,
@@ -79,6 +81,16 @@ class Scraper:
         self.__page: playwright.async_api.Page | None = None
         self.__logger = logger
 
+        # Cache storage for valid quotes and the scraped quotes values
+        self.__cached_valid_quotes = cachetools.TTLCache[str, bool](
+            maxsize=128.0,
+            ttl=600.0,
+        )
+        self.__cached_scraped_quotes = cachetools.TTLCache[str, QuoteDTO](
+            maxsize=128.0,
+            ttl=600.0,
+        )
+
         # Rebuilds the quote's models to solve imports (aka. `ForwardRef`)
         QuoteDTO.model_rebuild(_types_namespace=globals())
 
@@ -140,6 +152,7 @@ class Scraper:
 
         self.__page = None
 
+    @async_cachedmethod(cache=lambda self: self.__cached_valid_quotes)
     async def is_valid_ticker(self, ticker: str) -> bool:
         """Determine whether a ticker symbol exists on Google Finance.
 
@@ -181,6 +194,7 @@ class Scraper:
             # If it times out, then it assumes it is not verifiable
             return False
 
+    @async_cachedmethod(cache=lambda self: self.__cached_scraped_quotes)
     async def scrape_quote(self, ticker: str) -> QuoteDTO:
         """Retrieve and parse quote information for a ticker symbol.
 
