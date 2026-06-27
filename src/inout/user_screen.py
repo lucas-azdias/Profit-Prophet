@@ -20,7 +20,10 @@ from textual.widgets import Footer, Header
 from src.inout.mixins import UserInterfaceMixin
 
 if typing.TYPE_CHECKING:
+    import collections.abc
+
     from textual.app import ComposeResult
+    from textual.widget import Widget
 
 
 class UserScreen(UserInterfaceMixin, Screen[None]):
@@ -69,3 +72,65 @@ class UserScreen(UserInterfaceMixin, Screen[None]):
     def action_unfocus_widget(self) -> None:
         """Remove focus from the currently focused widget."""
         self.app.set_focus(None)
+
+    async def execute_loading_worker[R](
+        self,
+        widget: Widget,
+        awaitable: collections.abc.Awaitable[R],
+        successful_msg: str,
+        *,
+        catchable_exceptions: tuple[type[BaseException], ...] = (),
+        exception_msg: str = "Error occurred",
+    ) -> bool:
+        """Execute an asynchronous task while displaying a loading indicator on a widget.
+
+        This method manages the loading state of a specific widget during the execution
+        of a background awaitable task. It handles exceptions gracefully, displays user
+        notifications for success or failure, and guarantees that the loading spinner
+        is turned off when completed.
+
+        Args:
+            widget (Widget):
+                The Textual widget that should display the loading spinner.
+
+            awaitable (Awaitable[R]):
+                The coroutine or awaitable task to be executed.
+
+            successful_msg (str):
+                The toast notification message to display upon success.
+
+            catchable_exceptions (tuple[type[BaseException], ...]):
+                A tuple of exception classes to intercept and handle.
+
+            exception_msg (str):
+                The toast notification error message to display if an expected
+                exception is raised.
+
+        Returns:
+            bool:
+                True if the awaitable completed successfully without raising a caught
+                exception; False otherwise.
+
+        """
+        # Turns on built-in loading indicator spinner on widget
+        widget.loading = True
+
+        # Final result sucess flag
+        result = False
+
+        try:
+            # Executes and awaits awaitable
+            await awaitable
+        except catchable_exceptions:
+            self.notify(exception_msg, severity="error")
+        else:
+            # Notifies about sucessful execution
+            self.notify(successful_msg)
+
+            # Changes result to sucess
+            result = True
+        finally:
+            # Turns off the loading indicator
+            widget.loading = False
+
+        return result
