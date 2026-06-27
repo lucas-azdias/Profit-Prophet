@@ -33,7 +33,8 @@ def __async_cache_get[K, R](  # noqa: PLR0913
     fn: collections.abc.Callable[..., collections.abc.Coroutine[typing.Any, typing.Any, R]],
     args: tuple[typing.Any, ...],
     kwargs: dict[str, typing.Any],
-    cache_exceptions: bool,
+    result_predicate: collections.abc.Callable[[typing.Any], bool] = lambda _: True,
+    exception_predicate: collections.abc.Callable[[BaseException], bool] = lambda _: True,
 ) -> tuple[asyncio.Task[R], asyncio.Future[R]]:
     with contextlib.suppress(KeyError):
         # If alrady exists a cached version, return it
@@ -52,18 +53,26 @@ def __async_cache_get[K, R](  # noqa: PLR0913
             future.cancel()
             return
 
-        # Optionally discards failed tasks to allow future retries
+        # Treats thrown exceptions inside executed task
         exception = t.exception()
         if exception is not None:
-            if not cache_exceptions:
+            # Validates if the thrown exception should invalidate caching
+            if not exception_predicate(exception):
                 cache.pop(key, None)
 
             # Propagates the exception
             future.set_exception(exception)
             return
 
+        # Successful result
+        result = t.result()
+
+        # Validates if the result should invalidate caching
+        if not result_predicate(result):
+            cache.pop(key, None)
+
         # Stores the successful result in the shared future
-        future.set_result(t.result())
+        future.set_result(result)
 
     # Adds `done` callback of future to task
     task.add_done_callback(done)
@@ -157,17 +166,20 @@ class __AsyncMethodDecorator[K](typing.Protocol):
         raise NotImplementedError
 
 
-def async_cached[K](
+# IGNORE: Function defines a public interface
+# that necessitates many arguments
+def async_cached[K](  # noqa: PLR0913
     cache: collections.abc.MutableMapping[
         K,
         tuple[asyncio.Task[typing.Any], asyncio.Future[typing.Any]],
     ]
     | None,
+    *,
     key: collections.abc.Callable[..., K] = cachetools.keys.hashkey,
     lock: contextlib.AbstractContextManager[typing.Any] | None = None,
-    *,
     info: bool = False,
-    cache_exceptions: bool = True,
+    result_predicate: collections.abc.Callable[[typing.Any], bool] = lambda _: True,
+    exception_predicate: collections.abc.Callable[[BaseException], bool] = lambda _: True,
 ) -> __AsyncFunctionDecorator[K]:
     """Decorate caching async function results using asyncio `Future`.
 
@@ -190,11 +202,18 @@ def async_cached[K](
         info (bool):
             If True, raises NotImplementedError (not supported).
 
-        cache_exceptions (bool):
-            Whether futures that complete with an exception should remain
-            cached. If False, failed futures are removed from the cache,
-            allowing subsequent calls with the same key to retry the
-            computation. Defaults to True.
+        result_predicate (Callable[[Any], bool]):
+            A custom callable that receives the completed result of the
+            coroutine and returns True if it should remain cached. If it
+            returns False, the result is evicted from the cache immediately
+            upon completion. Defaults to a lambda that always returns True.
+
+        exception_predicate (Callable[[BaseException], bool]):
+            A custom callable that receives the raised exception if the
+            coroutine fails, returning True if the exception should be cached.
+            If it returns False, the failed future is evicted, allowing
+            subsequent calls to retry execution. Defaults to a lambda that
+            always returns True.
 
     Returns:
         __AsyncFunctionDecorator[K]:
@@ -233,7 +252,8 @@ def async_cached[K](
                 fn=fn,
                 args=args,
                 kwargs=kwargs,
-                cache_exceptions=cache_exceptions,
+                result_predicate=result_predicate,
+                exception_predicate=exception_predicate,
             )
 
             try:
@@ -264,7 +284,9 @@ def async_cached[K](
     return decorator
 
 
-def async_cachedmethod[K](
+# IGNORE: Function defines a public interface
+# that necessitates many arguments
+def async_cachedmethod[K](  # noqa: PLR0913
     cache: collections.abc.Callable[
         [typing.Any],
         collections.abc.MutableMapping[
@@ -273,11 +295,13 @@ def async_cachedmethod[K](
         ]
         | None,
     ],
+    *,
     key: collections.abc.Callable[..., K] = cachetools.keys.methodkey,
     lock: collections.abc.Callable[[typing.Any], contextlib.AbstractContextManager[typing.Any]]
     | None = None,
-    *,
-    cache_exceptions: bool = True,
+    info: bool = False,
+    result_predicate: collections.abc.Callable[[typing.Any], bool] = lambda _: True,
+    exception_predicate: collections.abc.Callable[[BaseException], bool] = lambda _: True,
 ) -> __AsyncMethodDecorator[K]:
     """Decorate caching async instance/class methods.
 
@@ -298,11 +322,21 @@ def async_cachedmethod[K](
         lock (Callable[[Any], AbstractContextManager[Any]] | None):
             Optional lock context manager factory. Not supported.
 
-        cache_exceptions (bool):
-            Whether futures that complete with an exception should remain
-            cached. If False, failed futures are removed from the cache,
-            allowing subsequent calls with the same key to retry the
-            computation. Defaults to True.
+        info (bool):
+            If True, raises NotImplementedError (not supported).
+
+        result_predicate (Callable[[Any], bool]):
+            A custom callable that receives the completed result of the
+            coroutine and returns True if it should remain cached. If it
+            returns False, the result is evicted from the cache immediately
+            upon completion. Defaults to a lambda that always returns True.
+
+        exception_predicate (Callable[[BaseException], bool]):
+            A custom callable that receives the raised exception if the
+            coroutine fails, returning True if the exception should be cached.
+            If it returns False, the failed future is evicted, allowing
+            subsequent calls to retry execution. Defaults to a lambda that
+            always returns True.
 
     Returns:
         __AsyncMethodDecorator[K]:
@@ -313,6 +347,10 @@ def async_cachedmethod[K](
             If `lock` is provided.
 
     """
+    if info:
+        msg = "`info` is not supported"
+        raise NotImplementedError(msg)
+
     if lock is not None:
         msg = "`lock` is not supported"
         raise NotImplementedError(msg)
@@ -339,7 +377,8 @@ def async_cachedmethod[K](
                 fn=fn,
                 args=args,
                 kwargs=kwargs,
-                cache_exceptions=cache_exceptions,
+                result_predicate=result_predicate,
+                exception_predicate=exception_predicate,
             )
 
             try:
