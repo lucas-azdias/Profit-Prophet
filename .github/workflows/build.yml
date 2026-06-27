@@ -5,6 +5,10 @@ on:
         tags:
             - "v*.*.*"
 
+env:
+    APP_NAME: ProfitProphet
+    BINARY_NAME: pprophet
+
 permissions:
     contents: write
 
@@ -58,21 +62,21 @@ jobs:
                   ARCH="${{ matrix.arch }}"
 
                   if [ "${{ runner.os }}" = "Windows" ]; then
-                    cp "build/src.exe" "dist.unpacked/website_archiver.exe"
+                    cp "build/src.exe" "dist.unpacked/${BINARY_NAME}.exe"
                     powershell.exe -Command "
                     Compress-Archive -Path dist.unpacked\* \
-                      -DestinationPath dist\WebsiteArchiver-${VERSION}-${OS}-${ARCH}.zip \
+                      -DestinationPath dist\${env:APP_NAME}-${VERSION}-${OS}-${ARCH}.zip \
                       -Force
                     "
                   else
-                    cp "build/src.bin" "dist.unpacked/website_archiver"
-                    tar -czf "dist/WebsiteArchiver-${VERSION}-${OS}-${ARCH}.tar.gz" dist.unpacked/*
+                    cp "build/src.bin" "dist.unpacked/${BINARY_NAME}"
+                    tar -czf "dist/${APP_NAME}-${VERSION}-${OS}-${ARCH}.tar.gz" dist.unpacked/*
                   fi
 
             - name: Uploading artifacts
               uses: actions/upload-artifact@v7
               with:
-                  name: WebsiteArchiver-${{ runner.os }}-${{ matrix.arch }}
+                  name: ${{ env.APP_NAME }}-${{ runner.os }}-${{ matrix.arch }}
                   path: dist/*
 
     release:
