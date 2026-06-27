@@ -172,6 +172,11 @@ class Scraper:
                 True if the ticker appears to exist on Google Finance;
                 otherwise False.
 
+        Raises:
+            RuntimeError:
+                If an unexpected Playwright error occurs while validating
+                the ticker.
+
         """
         try:
             # Loads ticker URL
@@ -183,6 +188,9 @@ class Scraper:
         except playwright.async_api.TimeoutError:
             # If it times out, then it assumes it is not verifiable
             return False
+        except playwright.async_api.Error:
+            msg = f"Playwright encountered an error while loading quote page for ticker '{ticker}'"
+            raise RuntimeError(msg) from None
 
         # Check for the presence of the error message
         error_message = self.__launched_page.locator("text=We couldn't find any match")
@@ -193,6 +201,9 @@ class Scraper:
         except playwright.async_api.TimeoutError:
             # If it times out, then it assumes it is not verifiable
             return False
+        except playwright.async_api.Error:
+            msg = f"Playwright encountered an error while checking quote page for ticker '{ticker}'"
+            raise RuntimeError(msg) from None
 
     @async_cachedmethod(cache=lambda self: self.__cached_scraped_quotes)
     async def scrape_quote(self, ticker: str) -> QuoteDTO:
@@ -215,6 +226,10 @@ class Scraper:
                 If webpage does not finish loading within the configured
                 timeout period.
 
+            RuntimeError:
+                If an unexpected Playwright error occurs while loading the
+                webpage.
+
             TypeError:
                 If the quote model or one of its section models contains invalid
                 metadata or unsupported field types.
@@ -228,8 +243,11 @@ class Scraper:
                 timeout=2000,
             )
         except playwright.async_api.TimeoutError:
-            msg = f"Timed out while loading Google Finance quote page for ticker '{ticker}'"
+            msg = f"Timed out while loading quote page for ticker '{ticker}'"
             raise TimeoutError(msg) from None
+        except playwright.async_api.Error:
+            msg = f"Playwright encountered an error while loading quote page for ticker '{ticker}'"
+            raise RuntimeError(msg) from None
 
         try:
             # Waits for page to load completly with a manually selected event
@@ -238,10 +256,12 @@ class Scraper:
                 predicate=lambda response: response.url.endswith(".m3u8") and response.ok,
                 timeout=5000,
             )
-        except playwright.async_api.TimeoutError:
+        except playwright.async_api.TimeoutError, playwright.async_api.Error:
             self.__logger.log(
-                f"Scraper '{self.__class__.__name__}' got timeouted when waiting "
-                f"for event in '{ticker}' page",
+                (
+                    f"'{self.__class__.__name__}' got timeouted when waiting "
+                    f"for event in '{ticker}' page"
+                ),
                 msg_type="warning",
             )
 
@@ -364,7 +384,10 @@ class Scraper:
         match field_metadata.search_method:
             case QuoteSectionFieldSearchMethods.XPATH:
                 # Ignores it if timeout occurs
-                with contextlib.suppress(playwright.async_api.TimeoutError):
+                with contextlib.suppress(
+                    playwright.async_api.TimeoutError,
+                    playwright.async_api.Error,
+                ):
                     # Goes to section's XPath and retrieve data
                     field_data_text = await container.locator(
                         f"xpath={field_metadata.label}",
@@ -375,7 +398,7 @@ class Scraper:
                 try:
                     # Gets inner text
                     inner_text = await container.inner_text(timeout=1000)
-                except playwright.async_api.TimeoutError:
+                except playwright.async_api.TimeoutError, playwright.async_api.Error:
                     return None
 
                 # Converts to lines
