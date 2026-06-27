@@ -80,8 +80,7 @@ class Portfolio:
                 asset,
                 QuantityStrategy(),
                 await self.__price_provider.get_price(asset.name)
-                if await self.__price_provider.is_valid_ticker(asset.name)
-                and not asset.asset_type.is_unitary_asset
+                if not asset.asset_type.is_unitary_asset
                 else None,
             )
             for asset_type in self.__model.asset_types
