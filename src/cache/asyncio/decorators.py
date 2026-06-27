@@ -26,15 +26,15 @@ if typing.TYPE_CHECKING:
 
 # IGNORE: The bigger amount of arguments is necessary
 # for simpler structure of code.
-def __async_cache_get[K, **P, R_co](  # noqa: PLR0913
+def __async_cache_get[K, **P, R](  # noqa: PLR0913
     *,
-    cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R_co], asyncio.Future[R_co]]],
+    cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R], asyncio.Future[R]]],
     key: K,
-    fn: collections.abc.Callable[P, collections.abc.Coroutine[typing.Any, typing.Any, R_co]],
+    fn: collections.abc.Callable[P, collections.abc.Coroutine[typing.Any, typing.Any, R]],
     args: tuple[typing.Any, ...],
     kwargs: dict[str, typing.Any],
     cache_exceptions: bool,
-) -> tuple[asyncio.Task[R_co], asyncio.Future[R_co]]:
+) -> tuple[asyncio.Task[R], asyncio.Future[R]]:
     with contextlib.suppress(KeyError):
         # If alrady exists a cached version, return it
         return cache[key]
@@ -42,10 +42,10 @@ def __async_cache_get[K, **P, R_co](  # noqa: PLR0913
     # Creates a new task for this call
     loop = asyncio.get_event_loop()
     task = loop.create_task(fn(*args, **kwargs))
-    future: asyncio.Future[R_co] = loop.create_future()
+    future: asyncio.Future[R] = loop.create_future()
 
     # `done` callback for when future is concluded
-    def done(t: asyncio.Task[R_co]) -> None:
+    def done(t: asyncio.Task[R]) -> None:
         # Removes cancelled tasks from the cache
         if t.cancelled():
             cache.pop(key, None)
@@ -75,10 +75,10 @@ def __async_cache_get[K, **P, R_co](  # noqa: PLR0913
     return task, future
 
 
-class __AsyncCacheCallable[**P, R_co](typing.Protocol):
+class __AsyncCacheCallable[**P, R](typing.Protocol):
     """Async callable with cache metadata attached."""
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> collections.abc.Awaitable[R_co]:
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> collections.abc.Awaitable[R]:
         """Invoke the wrapped asynchronous callable.
 
         Args:
@@ -89,29 +89,29 @@ class __AsyncCacheCallable[**P, R_co](typing.Protocol):
                 Keyword arguments forwarded to the wrapped callable.
 
         Returns:
-            Awaitable[R_co]:
+            Awaitable[R]:
                 An awaitable that resolves to the wrapped callable's result.
 
         """
         raise NotImplementedError
 
 
-class __AsyncCachedCallable[K, **P, R_co](__AsyncCacheCallable[P, R_co]):
+class __AsyncCachedCallable[K, **P, R](__AsyncCacheCallable[P, R]):
     """Async callable with cache metadata attached for functions."""
 
-    cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R_co], asyncio.Future[R_co]]] | None
+    cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R], asyncio.Future[R]]] | None
     cache_key: collections.abc.Callable[..., K]
     cache_lock: contextlib.AbstractContextManager[typing.Any] | None
     cache_clear: collections.abc.Callable[[], None]
     cache_info: bool | None
 
 
-class __AsyncCachedMethodCallable[K, **P, R_co](__AsyncCacheCallable[P, R_co]):
+class __AsyncCachedMethodCallable[K, **P, R](__AsyncCacheCallable[P, R]):
     """Async callable with cache metadata attached for methods."""
 
     cache: collections.abc.Callable[
         [typing.Any],
-        collections.abc.MutableMapping[K, tuple[asyncio.Task[R_co], asyncio.Future[R_co]]] | None,
+        collections.abc.MutableMapping[K, tuple[asyncio.Task[R], asyncio.Future[R]]] | None,
     ]
     cache_key: collections.abc.Callable[..., K]
     cache_lock: contextlib.AbstractContextManager[typing.Any] | None
@@ -129,14 +129,14 @@ class __AsyncCachedMethodCallable[K, **P, R_co](__AsyncCacheCallable[P, R_co]):
         # user-defined type.
         instance: typing.Any,  # noqa: ANN401
         owner: type | None,
-    ) -> __AsyncCacheCallable[P_New, R_co]: ...
+    ) -> __AsyncCacheCallable[P_New, R]: ...
 
     def __get__(self, instance: typing.Any, owner: type | None) -> typing.Any:
         if instance is None:
             return self
         # Binds the method to the instance at runtime
         bound = typing.cast(
-            "__AsyncCachedMethodCallable[K, P, R_co]",
+            "__AsyncCachedMethodCallable[K, P, R]",
             functools.partial(self.__call__, instance),
         )
 
@@ -149,17 +149,16 @@ class __AsyncCachedMethodCallable[K, **P, R_co](__AsyncCacheCallable[P, R_co]):
         return bound
 
 
-def async_cached[K, **P, R_co](
-    cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R_co], asyncio.Future[R_co]]]
-    | None,
+def async_cached[K, **P, R](
+    cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R], asyncio.Future[R]]] | None,
     key: collections.abc.Callable[..., K] = cachetools.keys.hashkey,
     lock: contextlib.AbstractContextManager[typing.Any] | None = None,
     *,
     info: bool = False,
     cache_exceptions: bool = True,
 ) -> collections.abc.Callable[
-    [collections.abc.Callable[P, collections.abc.Awaitable[R_co]]],
-    __AsyncCachedCallable[K, P, R_co],
+    [collections.abc.Callable[P, collections.abc.Awaitable[R]]],
+    __AsyncCachedCallable[K, P, R],
 ]:
     """Decorate caching async function results using asyncio `Future`.
 
@@ -169,7 +168,7 @@ def async_cached[K, **P, R_co](
     preventing duplicate execution (cache stampede protection).
 
     Args:
-        cache (MutableMapping[K, tuple[Task[R_co], Future[R_co]]] | None):
+        cache (MutableMapping[K, tuple[Task[R], Future[R]]] | None):
             Mutable mapping used to store tasks and futures. If None, caching is disabled.
 
         key (Callable[..., K]):
@@ -189,7 +188,7 @@ def async_cached[K, **P, R_co](
             computation. Defaults to True.
 
     Returns:
-        Callable[[Callable[P, Awaitable[R_co]]], __AsyncCachedCallable[K, P, R_co]]:
+        Callable[[Callable[P, Awaitable[R]]], __AsyncCachedCallable[K, P, R]]:
             A decorator that wraps an async function with caching behavior.
 
     Raises:
@@ -206,13 +205,13 @@ def async_cached[K, **P, R_co](
         raise NotImplementedError(msg)
 
     def decorator(
-        fn: collections.abc.Callable[P, collections.abc.Awaitable[R_co]],
-    ) -> __AsyncCachedCallable[K, P, R_co]:
+        fn: collections.abc.Callable[P, collections.abc.Awaitable[R]],
+    ) -> __AsyncCachedCallable[K, P, R]:
         if not inspect.iscoroutinefunction(fn):
             msg = f"Expected 'Coroutine' function, got {fn}"
             raise TypeError(msg)
 
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_co:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             if cache is None:
                 return await fn(*args, **kwargs)
 
@@ -241,7 +240,7 @@ def async_cached[K, **P, R_co](
                 raise
 
         wrapped = typing.cast(
-            "__AsyncCachedCallable[K, P, R_co]",
+            "__AsyncCachedCallable[K, P, R]",
             functools.update_wrapper(wrapper, fn),
         )
 
@@ -256,10 +255,10 @@ def async_cached[K, **P, R_co](
     return decorator
 
 
-def async_cachedmethod[K, **P, R_co](
+def async_cachedmethod[K, **P, R](
     cache: collections.abc.Callable[
         [typing.Any],
-        collections.abc.MutableMapping[K, tuple[asyncio.Task[R_co], asyncio.Future[R_co]]] | None,
+        collections.abc.MutableMapping[K, tuple[asyncio.Task[R], asyncio.Future[R]]] | None,
     ],
     key: collections.abc.Callable[..., K] = cachetools.keys.methodkey,
     lock: collections.abc.Callable[[typing.Any], contextlib.AbstractContextManager[typing.Any]]
@@ -267,8 +266,8 @@ def async_cachedmethod[K, **P, R_co](
     *,
     cache_exceptions: bool = True,
 ) -> collections.abc.Callable[
-    [collections.abc.Callable[P, collections.abc.Awaitable[R_co]]],
-    __AsyncCachedMethodCallable[K, P, R_co],
+    [collections.abc.Callable[P, collections.abc.Awaitable[R]]],
+    __AsyncCachedMethodCallable[K, P, R],
 ]:
     """Decorate caching async instance/class methods.
 
@@ -279,7 +278,7 @@ def async_cachedmethod[K, **P, R_co](
     is attached to `self` or another runtime context.
 
     Args:
-        cache (Callable[[Any], MutableMapping[K, tuple[Task[R_co], Future[R_co]]] | None]):
+        cache (Callable[[Any], MutableMapping[K, tuple[Task[R], Future[R]]] | None]):
             Callable that returns a `MutableMapping` for the given instance,
             or None to disable caching for that instance.
 
@@ -296,7 +295,7 @@ def async_cachedmethod[K, **P, R_co](
             computation. Defaults to True.
 
     Returns:
-        Callable[[Callable[P, Awaitable[R_co]]], __AsyncCachedMethodCallable[K, P, R_co]]:
+        Callable[[Callable[P, Awaitable[R]]], __AsyncCachedMethodCallable[K, P, R]]:
             A decorator that wraps an async method with caching behavior.
 
     Raises:
@@ -309,13 +308,13 @@ def async_cachedmethod[K, **P, R_co](
         raise NotImplementedError(msg)
 
     def decorator(
-        fn: collections.abc.Callable[P, collections.abc.Awaitable[R_co]],
-    ) -> __AsyncCachedMethodCallable[K, P, R_co]:
+        fn: collections.abc.Callable[P, collections.abc.Awaitable[R]],
+    ) -> __AsyncCachedMethodCallable[K, P, R]:
         if not inspect.iscoroutinefunction(fn):
             msg = f"Expected Coroutine function, got {fn}"
             raise TypeError(msg)
 
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_co:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             # Safely capture 'self' if args are passed
             self_obj = args[0] if args else None
             self_cache = cache(self_obj)
@@ -348,7 +347,7 @@ def async_cachedmethod[K, **P, R_co](
                 raise
 
         wrapped = typing.cast(
-            "__AsyncCachedMethodCallable[K, P, R_co]",
+            "__AsyncCachedMethodCallable[K, P, R]",
             functools.update_wrapper(wrapper, fn),
         )
 
