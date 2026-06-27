@@ -24,15 +24,11 @@ if typing.TYPE_CHECKING:
     import collections.abc
 
 
-# IGNORE: The bigger amount of arguments is necessary
-# for simpler structure of code.
-def __async_cache_get[K, R](  # noqa: PLR0913
+def __async_cache_get[K, R](
     *,
     cache: collections.abc.MutableMapping[K, tuple[asyncio.Task[R], asyncio.Future[R]]],
     key: K,
-    fn: collections.abc.Callable[..., collections.abc.Coroutine[typing.Any, typing.Any, R]],
-    args: tuple[typing.Any, ...],
-    kwargs: dict[str, typing.Any],
+    call_fn: collections.abc.Callable[[], collections.abc.Coroutine[typing.Any, typing.Any, R]],
     result_predicate: collections.abc.Callable[[typing.Any], bool] = lambda _: True,
     exception_predicate: collections.abc.Callable[[BaseException], bool] = lambda _: True,
 ) -> tuple[asyncio.Task[R], asyncio.Future[R]]:
@@ -42,7 +38,7 @@ def __async_cache_get[K, R](  # noqa: PLR0913
 
     # Creates a new task for this call
     loop = asyncio.get_event_loop()
-    task = loop.create_task(fn(*args, **kwargs))
+    task = loop.create_task(call_fn())
     future: asyncio.Future[R] = loop.create_future()
 
     # `done` callback for when future is concluded
@@ -249,9 +245,7 @@ def async_cached[K](  # noqa: PLR0913
             task, future = __async_cache_get(
                 cache=cache,
                 key=generated_key,
-                fn=fn,
-                args=args,
-                kwargs=kwargs,
+                call_fn=lambda: fn(*args, **kwargs),
                 result_predicate=result_predicate,
                 exception_predicate=exception_predicate,
             )
@@ -374,9 +368,7 @@ def async_cachedmethod[K](  # noqa: PLR0913
             task, future = __async_cache_get(
                 cache=self_cache,
                 key=generated_key,
-                fn=fn,
-                args=args,
-                kwargs=kwargs,
+                call_fn=lambda: fn(self_obj, *args, **kwargs),
                 result_predicate=result_predicate,
                 exception_predicate=exception_predicate,
             )
