@@ -363,7 +363,7 @@ def async_cachedmethod[K](  # noqa: PLR0913
                 return await fn(self_obj, *args, **kwargs)
 
             # Generates key
-            generated_key = key(*args, **kwargs)
+            generated_key = key(self_obj, *args, **kwargs)
 
             task, future = __async_cache_get(
                 cache=self_cache,
