@@ -230,13 +230,16 @@ class AllocationMenu(UserScreen):
         confirm_button.disabled = True
 
         # Builds necessary data inside portfolios
-        await self.app.finance_manager.build_data()
+        success = await self.execute_loading_worker(
+            confirm_button,
+            self.app.finance_manager.build_data(),
+            "Data has been built",
+            catchable_exceptions=(TimeoutError,),
+            exception_msg="Timeout occurred while retrieving data",
+        )
 
-        # Notifies about building completion
-        self.notify("Data has been built")
-
-        # Releases confirm button after building
-        confirm_button.disabled = False
+        # Releases confirm button after building with sucess or not
+        confirm_button.disabled = not success
 
     def __generate_allocation(self, *, show_errors: bool = True) -> None:
         # Gets the input element
@@ -250,6 +253,14 @@ class AllocationMenu(UserScreen):
             if show_errors:
                 self.notify(msg, severity="error")
             self.app.logger.log(msg, msg_type="error")
+            return
+
+        # Checks if value is negative or null
+        if value <= 0:
+            msg = "Cannot allocate negative or null values"
+            if show_errors:
+                self.notify(msg, severity="warning")
+            self.app.logger.log(msg, msg_type="warning")
             return
 
         # Gets the select element
