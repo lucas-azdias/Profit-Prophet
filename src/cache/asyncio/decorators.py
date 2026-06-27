@@ -107,11 +107,6 @@ class __AsyncCachedMethodCallable[K, **P, R](typing.Protocol):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> collections.abc.Awaitable[R]:
         raise NotImplementedError
 
-    @typing.overload
-    def __get__(self, instance: None, owner: type | None) -> typing.Self:
-        raise NotImplementedError
-
-    @typing.overload
     def __get__(
         self,
         # IGNORE: Type `Any` was used as it must The descriptor
@@ -120,10 +115,7 @@ class __AsyncCachedMethodCallable[K, **P, R](typing.Protocol):
         # user-defined type.
         instance: typing.Any,  # noqa: ANN401
         owner: type | None,
-    ) -> collections.abc.Awaitable[R]:
-        raise NotImplementedError
-
-    def __get__(self, instance: typing.Any, owner: type | None) -> typing.Any:
+    ) -> __AsyncCachedMethodCallable[K, P, R]:
         if instance is None:
             return self
 
