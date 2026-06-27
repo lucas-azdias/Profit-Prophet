@@ -25,7 +25,7 @@ class PriceProvider(typing.Protocol):
     ticker validation.
     """
 
-    async def get_price(self, ticker: str) -> decimal.Decimal:
+    async def get_price(self, ticker: str) -> decimal.Decimal | None:
         """Retrieve the current market price for a ticker.
 
         Args:
@@ -33,22 +33,8 @@ class PriceProvider(typing.Protocol):
                 Asset ticker symbol.
 
         Returns:
-            Decimal
-                The current market price.
-
-        """
-        raise NotImplementedError
-
-    async def is_valid_ticker(self, ticker: str) -> bool:
-        """Determine whether a ticker symbol is valid.
-
-        Args:
-            ticker (str):
-                Asset ticker symbol.
-
-        Returns:
-            bool:
-                True if the ticker is valid; otherwise, False.
+            Decimal | None
+                The current market price if available.
 
         """
         raise NotImplementedError
@@ -75,7 +61,7 @@ class GoogleFinancePriceProvider:
         # Flush any pending scraper operations and release resources
         await self.__scraper.dispatch()
 
-    async def get_price(self, ticker: str) -> decimal.Decimal:
+    async def get_price(self, ticker: str) -> decimal.Decimal | None:
         """Retrieve the current market price for a ticker.
 
         Args:
@@ -83,39 +69,15 @@ class GoogleFinancePriceProvider:
                 Asset ticker symbol.
 
         Returns:
-            Decimal:
-                The current market price.
-
-        Raises:
-            ValueError:
-                If a price cannot be obtained for the ticker.
+            Decimal | None:
+                The current market price if available.
 
         """
         async with self.__scraper as scraper:
+            if not await scraper.is_valid_ticker(ticker):
+                return None
+
             # Request the latest quote information for the ticker
             quote = await scraper.scrape_quote(ticker)
 
-        price = quote.header.price
-
-        # A quote was found, but it does not contain a valid price
-        if price is None:
-            msg = f"Could not retrieve price for ticker '{ticker}'"
-            raise ValueError(msg)
-
-        return price
-
-    async def is_valid_ticker(self, ticker: str) -> bool:
-        """Determine whether a ticker symbol exists and can be queried.
-
-        Args:
-            ticker (str):
-                Asset ticker symbol.
-
-        Returns:
-            bool:
-                True if the ticker is valid; otherwise, False.
-
-        """
-        # Delegate ticker validation to the Google Finance scraper
-        async with self.__scraper as scraper:
-            return await scraper.is_valid_ticker(ticker)
+        return quote.header.price
