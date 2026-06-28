@@ -1,6 +1,6 @@
 repos:
     - repo: https://github.com/RobertCraigie/pyright-python
-      rev: v1.1.410
+      rev: v1.1.411
       hooks:
           - id: pyright
 
@@ -8,7 +8,5 @@ repos:
       rev: v0.15.16
       hooks:
           - id: ruff-format
-            args: ["./src"]
-
           - id: ruff-check
-            args: ["./src", "--fix"]
+            args: ["--fix"]

@@ -7,6 +7,9 @@ requires-python = ">=3.14"
 dependencies = [
     "aiosqlite>=0.22.1",
     "alembic>=1.18.4",
+    "cachetools>=7.1.4",
+    "playwright>=1.60.0",
+    "pydantic>=2.13.4",
     "pyfiglet>=1.0.4",
     "sqlalchemy>=2.0.50",
     "textual>=8.2.7",
@@ -16,7 +19,7 @@ dependencies = [
 dev = [
     "poethepoet>=0.46.0",
     "pre-commit>=4.6.0",
-    "pyright>=1.1.410",
+    "pyright>=1.1.411",
     "ruff>=0.15.16",
 ]
 
@@ -32,12 +35,13 @@ revise = "uv run alembic revision --autogenerate -m"
 
 [tool.ruff]
 include = ["src/**"]
-exclude = ["src/database/alembic/versions", "src/database/alembic/script.py.mako"]
-line-length = 120
+extend-exclude = ["*.mako"]
+line-length = 100
 format.quote-style = "double"
 format.indent-style = "space"
 lint.preview = true
 lint.select = ["ALL"]
+lint.ignore = ["D203", "D213"]
 
 [tool.pyright]
 include = ["src"]

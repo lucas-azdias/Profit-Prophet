@@ -2,16 +2,18 @@
 
 """Textual application entry point and screen management.
 
-This module defines :class:`UserInterface`, the root Textual application
-responsible for managing screen navigation, database access, logging,
-and global keyboard bindings.
+This module defines `UserInterface`, the root Textual application responsible
+for managing screen navigation, database access, logging, and global keyboard
+bindings.
 """
 
 import typing
 
+from textual import on
 from textual.app import App
-from textual.binding import Binding
+from textual.events import Mount
 
+from src.finance.finance_manager import FinanceManager
 from src.inout.screens.allocation_menu import AllocationMenu
 from src.inout.screens.crud_menu import CrudMenu
 from src.inout.screens.main_menu import MainMenu
@@ -23,6 +25,8 @@ if typing.TYPE_CHECKING:
 
     from src.database.database import Database
     from src.inout.logger import Logger
+    from src.inout.user_screen import UserScreen
+    from src.scrapers.browser_engine import BrowserEngine
 
 
 class UserInterface(App[None]):
@@ -34,23 +38,30 @@ class UserInterface(App[None]):
     available screens.
     """
 
-    SCREENS: typing.ClassVar = {
+    # IGNORE: The type was overriden to allow access to screens inside
+    # and avoid complain for unknown generic type as Textual
+    # doesn't specify it as `Any`
+    SCREENS: typing.ClassVar[dict[str, type[UserScreen]]] = {  # pyright: ignore[reportIncompatibleVariableOverride]
         "main": MainMenu,
         "crud": CrudMenu,
         "alloc": AllocationMenu,
     }
 
-    BINDINGS: typing.ClassVar = [
-        Binding("up", "app.focus_previous", "Up"),
-        Binding("left", "app.focus_previous", "Left"),
-        Binding("down", "app.focus_next", "Down"),
-        Binding("right", "app.focus_next", "Right"),
-    ]
+    DEFAULT_CSS = """
+    .screen {
+        width: 100%;
+        height: 100%;
+        padding-top: 1;
+    }
+    """
 
+    # IGNORE: It is importing parameters from Textual `App` class,
+    # so it was necessary to ignore limit of them
     def __init__(  # noqa: PLR0913
         self,
         database: Database,
         logger: Logger,
+        browser_engine: BrowserEngine,
         *,
         driver_class: type[Driver] | None = None,
         css_path: CSSPathType | None = None,
@@ -67,6 +78,11 @@ class UserInterface(App[None]):
             logger (Logger):
                 Logger instance used to record application events and
                 diagnostics.
+
+            browser_engine (BrowserEngine):
+                Browser automation engine responsible for managing the Playwright
+                lifecycle, browser instance, and creation of isolated browser
+                contexts used by scraping operations.
 
             driver_class (type[Driver] | None):
                 Optional Textual driver implementation used to run the
@@ -87,6 +103,7 @@ class UserInterface(App[None]):
         super().__init__(driver_class, css_path, watch_css, ansi_color)
         self.__database = database
         self.__logger = logger
+        self.__finance_manager = FinanceManager(self.__database, browser_engine, self.__logger)
 
     @property
     def logger(self) -> Logger:
@@ -99,6 +116,18 @@ class UserInterface(App[None]):
         """
         return self.__logger
 
+    @property
+    def finance_manager(self) -> FinanceManager:
+        """Return the application's finance manager.
+
+        Returns:
+            FinanceManager:
+                Finance manager responsible for portfolio allocation,
+                asset analysis, and other financial operations.
+
+        """
+        return self.__finance_manager
+
     def get_session(self) -> sqlalchemy.ext.asyncio.AsyncSession:
         """Create and return a new asynchronous database session.
 
@@ -109,6 +138,11 @@ class UserInterface(App[None]):
         """
         return self.__database.get_session()
 
-    def on_mount(self) -> None:
+    @on(Mount)
+    def handle_mount(self) -> None:
         """Display the main menu when the application starts."""
+        # Starts finance manager
+        self.run_worker(self.__finance_manager.start())
+
+        # Installs main screen
         self.push_screen("main")

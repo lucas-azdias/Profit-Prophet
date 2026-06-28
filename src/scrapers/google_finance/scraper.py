@@ -1,0 +1,526 @@
+# Copyright (C) 2026 Lucas Dias
+
+"""Google Finance quote scraper.
+
+This module provides an asynchronous scraper responsible for retrieving and
+parsing quote data from Google Finance. The scraper navigates to a quote page,
+extracts structured information from predefined sections, and converts the
+raw page content into strongly typed DTO models.
+"""
+
+import contextlib
+import datetime
+import decimal
+import re
+import typing
+import unicodedata
+
+import cachetools
+import playwright.async_api
+
+from src.cache.asyncio.decorators import async_cachedmethod
+from src.scrapers.google_finance.dtos.quote_dto import (
+    QuoteDTO,
+    QuoteSectionMetadataDTO,
+)
+from src.scrapers.google_finance.dtos.quote_section_dto import (
+    QuoteSectionDTO,
+    QuoteSectionFieldMetadataDTO,
+    QuoteSectionFieldSearchMethods,
+)
+
+# IGNORE: It is necessary to import all sections' models
+# for the model rebuild
+from src.scrapers.google_finance.dtos.quote_sections_dto import *  # noqa: F403
+
+if typing.TYPE_CHECKING:
+    import types
+
+    from src.inout.logger import Logger
+
+
+class Scraper:
+    """Asynchronous Google Finance quote scraper.
+
+    This scraper uses Playwright to load Google Finance quote pages and
+    extract financial data into structured DTOs.
+
+    An existing Playwright browser context must be provided during
+    initialization. The scraper creates a temporary page when entering the
+    asynchronous context manager and automatically closes it when exiting.
+
+    Page resources are scoped to the asynchronous context manager protocol and
+    are automatically created on entry and closed on exit.
+
+    Attributes:
+        BASE_URL (Literal):
+            Base Google Finance URL used to construct quote page requests.
+
+    """
+
+    BASE_URL: typing.ClassVar = "https://www.google.com/finance/beta/quote"
+
+    def __init__(
+        self,
+        context: playwright.async_api.BrowserContext,
+        logger: Logger,
+    ) -> None:
+        """Initialize a Google Finance scraper instance.
+
+        Args:
+            context (playwright.async_api.BrowserContext):
+                Browser context used to create pages for scraping operations.
+                The context must remain valid for the entire lifetime of the
+                scraper instance.
+
+            logger (Logger):
+                Logger used to record scraper events, warnings, and errors.
+
+        """
+        self.__context: playwright.async_api.BrowserContext | None = context
+        self.__page: playwright.async_api.Page | None = None
+        self.__logger = logger
+
+        # Cache storage for valid quotes and the scraped quotes values
+        self.__cached_valid_quotes = cachetools.TTLCache[str, bool](
+            maxsize=128.0,
+            ttl=600.0,
+        )
+        self.__cached_scraped_quotes = cachetools.TTLCache[str, QuoteDTO](
+            maxsize=128.0,
+            ttl=600.0,
+        )
+
+        # Rebuilds the quote's models to solve imports (aka. `ForwardRef`)
+        QuoteDTO.model_rebuild(_types_namespace=globals())
+
+        self.__model_fields = QuoteDTO.model_fields
+
+    async def __aenter__(self) -> typing.Self:
+        """Create a page and enter a scraping session.
+
+        Returns:
+            Scraper:
+                The initialized scraper instance.
+
+        Raises:
+            RuntimeError:
+                If browser context has already been dispatched.
+
+        """
+        if self.__context is None:
+            msg = f"'{self.__class__.__name__}' has already been dispatched"
+            raise RuntimeError(msg)
+
+        self.__page = await self.__context.new_page()
+
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> None:
+        """Close the active page when leaving the scraping session.
+
+        Args:
+            exc_type (type[BaseException] | None):
+                Type of the exception raised within the context block, if any.
+
+            exc (BaseException | None):
+                Exception instance raised within the context block, if any.
+
+            tb (types.TracebackType | None):
+                Traceback associated with the raised exception, if any.
+
+        """
+        if self.__page is not None:
+            await self.__page.close()
+            self.__page = None
+
+    async def dispatch(self) -> None:
+        """Release all resources associated with the scraper.
+
+        Closes the browser context and any pages created from it, then resets
+        the scraper state.
+
+        """
+        if self.__context is not None:
+            await self.__context.close()
+            self.__context = None
+
+        self.__page = None
+
+    @async_cachedmethod(cache=lambda self: self.__cached_valid_quotes)
+    async def is_valid_ticker(self, ticker: str) -> bool:
+        """Determine whether a ticker symbol exists on Google Finance.
+
+        Attempts to load the Google Finance quote page for the provided ticker
+        symbol and checks whether the page displays the standard "no match"
+        message returned for unknown instruments.
+
+        Any timeout encountered while loading the page or validating the
+        response is treated as a failed verification and results in False.
+
+        Args:
+            ticker (str):
+                Ticker symbol to validate.
+
+        Returns:
+            bool:
+                True if the ticker appears to exist on Google Finance;
+                otherwise False.
+
+        Raises:
+            RuntimeError:
+                If an unexpected Playwright error occurs while validating
+                the ticker.
+
+        """
+        try:
+            # Loads ticker URL
+            await self.__launched_page.goto(
+                f"{self.BASE_URL}/{ticker}?hl=en",
+                wait_until="domcontentloaded",
+                timeout=2000,
+            )
+        except playwright.async_api.TimeoutError:
+            # If it times out, then it assumes it is not verifiable
+            return False
+        except playwright.async_api.Error:
+            msg = f"Playwright encountered an error while loading quote page for ticker '{ticker}'"
+            raise RuntimeError(msg) from None
+
+        # Check for the presence of the error message
+        error_message = self.__launched_page.locator("text=We couldn't find any match")
+
+        try:
+            # Checks if the error message is visible
+            return not await error_message.is_visible(timeout=1000)
+        except playwright.async_api.TimeoutError:
+            # If it times out, then it assumes it is not verifiable
+            return False
+        except playwright.async_api.Error:
+            msg = f"Playwright encountered an error while checking quote page for ticker '{ticker}'"
+            raise RuntimeError(msg) from None
+
+    @async_cachedmethod(cache=lambda self: self.__cached_scraped_quotes)
+    async def scrape_quote(self, ticker: str) -> QuoteDTO:
+        """Retrieve and parse quote information for a ticker symbol.
+
+        Loads the corresponding Google Finance page, extracts all configured
+        quote sections, converts field values into their declared types, and
+        returns a fully populated quote DTO.
+
+        Args:
+            ticker (str):
+                Financial instrument ticker symbol to scrape.
+
+        Returns:
+            QuoteDTO:
+                Structured quote data for the requested ticker.
+
+        Raises:
+            TimeoutError:
+                If webpage does not finish loading within the configured
+                timeout period.
+
+            RuntimeError:
+                If an unexpected Playwright error occurs while loading the
+                webpage.
+
+            TypeError:
+                If the quote model or one of its section models contains invalid
+                metadata or unsupported field types.
+
+        """
+        try:
+            # Loads ticker URL
+            await self.__launched_page.goto(
+                f"{self.BASE_URL}/{ticker}?hl=en",
+                wait_until="domcontentloaded",
+                timeout=2000,
+            )
+        except playwright.async_api.TimeoutError:
+            msg = f"Timed out while loading quote page for ticker '{ticker}'"
+            raise TimeoutError(msg) from None
+        except playwright.async_api.Error:
+            msg = f"Playwright encountered an error while loading quote page for ticker '{ticker}'"
+            raise RuntimeError(msg) from None
+
+        try:
+            # Waits for page to load completly with a manually selected event
+            await self.__launched_page.wait_for_event(
+                "response",
+                predicate=lambda response: response.url.endswith(".m3u8") and response.ok,
+                timeout=5000,
+            )
+        except playwright.async_api.TimeoutError, playwright.async_api.Error:
+            self.__logger.log(
+                (
+                    f"'{self.__class__.__name__}' got timeouted when waiting "
+                    f"for event in '{ticker}' page"
+                ),
+                msg_type="warning",
+            )
+
+        # All quote's sections filled with data
+        quote_data: dict[str, QuoteSectionDTO] = {}
+
+        # Ticker field name inside quote class
+        ticker_name = "ticker"
+
+        # Builds all sections
+        for section_name, section_field in self.__model_fields.items():
+            # Skips ticker field
+            if section_name == ticker_name:
+                continue
+
+            # Validates if annotation indicates a quote section
+            if section_field.annotation is None or not issubclass(
+                section_field.annotation,
+                QuoteSectionDTO,
+            ):
+                msg = (
+                    f"Field '{section_name}' must be a '{QuoteSectionDTO.__name__}' "
+                    f"subclass, got {section_field.annotation!r}"
+                )
+                raise TypeError(msg)
+
+            # Retrieves XPath from section's metadata
+            xpath = QuoteSectionMetadataDTO.model_validate(section_field.json_schema_extra).xpath
+
+            # Builds section based on its fields' metadata
+            section = await self.__build_section(section_field.annotation, xpath)
+
+            # Stores section
+            quote_data[section_name] = section
+
+        # Returns compiled quote
+        return QuoteDTO.model_validate({**quote_data, ticker_name: ticker})
+
+    @property
+    def __launched_page(self) -> playwright.async_api.Page:
+        if self.__page is None:
+            msg = f"'{self.__class__.__name__}' must be used as an async context manager."
+            raise RuntimeError(msg)
+
+        return self.__page
+
+    async def __build_section(
+        self,
+        section_type: type[QuoteSectionDTO],
+        xpath: str,
+    ) -> QuoteSectionDTO:
+        # All section's fields filled with data
+        section_data: dict[str, typing.Any] = {}
+
+        # Rebuilds the section model to solve imports (aka. `ForwardRef`)
+        section_type.model_rebuild(_types_namespace=globals(), raise_errors=False)
+
+        # Builds all section's data based on its metadata
+        for field_name, field in section_type.model_fields.items():
+            # Sets the default value
+            section_data[field_name] = None
+
+            # Goes to section's XPath
+            container = self.__launched_page.locator(f"xpath={xpath}")
+
+            # Safely extract inner types from generic unions
+            field_args: tuple[type[typing.Any], ...] = typing.get_args(field.annotation)
+
+            # If no non-None types were found, then get the entire annotation
+            field_type = (
+                next((t for t in field_args if t is not type(None)), None) or field.annotation
+            )
+
+            # If no non-None types were found at all, then raises exception
+            if field_type is None:
+                msg = (
+                    f"Field '{field_name}' in model '{section_type.__name__}' "
+                    f"has an unresolvable type annotation: '{field.annotation}'. "
+                    f"Ensure the field provides at least one concrete runtime type."
+                )
+                raise TypeError(msg)
+
+            # Gets validated metadata
+            field_metadata = QuoteSectionFieldMetadataDTO.model_validate(
+                field.json_schema_extra,
+            )
+
+            # Extracts the specified field text in the section container
+            field_data_text: str | None = await self.__extract_field_text(container, field_metadata)
+
+            # No data was found for this field
+            if field_data_text is None:
+                continue
+
+            # Normalizes data and removes invalid characters
+            field_data_text = unicodedata.normalize("NFKC", field_data_text).strip()
+
+            # Applies regex into data if a pattern is defined in the metadata
+            field_data_text = self.__apply_regex_in_field(field_data_text, field_metadata)
+            if field_data_text is None:
+                continue
+
+            # Parses field data
+            field_data = self.__parse_data_in_field(field_data_text, field_type)
+
+            # Registers field data
+            section_data[field_name] = field_data
+
+        return section_type.model_validate(section_data)
+
+    @staticmethod
+    async def __extract_field_text(
+        container: playwright.async_api.Locator,
+        field_metadata: QuoteSectionFieldMetadataDTO,
+    ) -> str | None:
+        # Sets the default value
+        field_data_text: str | None = None
+
+        # Executes the selected search method for this field
+        match field_metadata.search_method:
+            case QuoteSectionFieldSearchMethods.XPATH:
+                # Ignores it if timeout occurs
+                with contextlib.suppress(
+                    playwright.async_api.TimeoutError,
+                    playwright.async_api.Error,
+                ):
+                    # Goes to section's XPath and retrieve data
+                    field_data_text = await container.locator(
+                        f"xpath={field_metadata.label}",
+                    ).text_content(timeout=1000)
+
+            case QuoteSectionFieldSearchMethods.SPLIT_LINES:
+                # Ignores it if timeout occurs
+                try:
+                    # Gets inner text
+                    inner_text = await container.inner_text(timeout=1000)
+                except playwright.async_api.TimeoutError, playwright.async_api.Error:
+                    return None
+
+                # Converts to lines
+                lines = [line for line in inner_text.splitlines() if line]
+
+                for i in range(len(lines) - 1):
+                    # Grabs the next line if label is matched
+                    if lines[i] == field_metadata.label:
+                        field_data_text = lines[i + 1].strip()
+                        break
+
+        return field_data_text
+
+    @staticmethod
+    def __apply_regex_in_field(
+        field_data_text: str,
+        field_metadata: QuoteSectionFieldMetadataDTO,
+    ) -> str | None:
+        match = re.search(field_metadata.regex_pattern, field_data_text)
+
+        # Couldn't match any data for this field
+        if not match:
+            return None
+
+        matched_chunks: list[str]
+
+        # If no custom ordering was requested, then use the entire regex match
+        if field_metadata.regex_order is None:
+            matched_chunks = [match.group()]
+
+        # Specific group ordering was requested
+        else:
+            # All matched named groups
+            named_groups = match.groupdict()
+
+            # Extract matched chunks in the specified order
+            matched_chunks = [
+                named_groups[group_name] or ""
+                for group_name in field_metadata.regex_order
+                if group_name in named_groups
+            ]
+
+        # Executes the post regex script
+        matched_chunks = list(field_metadata.post_regex(matched_chunks))
+
+        # Join chunks using the designated separator
+        return field_metadata.separator.join(matched_chunks)
+
+    @staticmethod
+    # IGNORE: Function is returning type `Any` to facilitate
+    # implementation of new parsing types; and, there is a strong
+    # validation with the `pydantic` model validation in a next step
+    def __parse_data_in_field(
+        field_data_text: str,
+        field_type: type[typing.Any],
+    ) -> typing.Any | None:  # noqa: ANN401
+        # Parsed field data
+        field_data: typing.Any | None = None
+
+        # Parses field data based on expected type
+        if field_type is str:
+            field_data = field_data_text
+
+        elif field_type is decimal.Decimal:
+            # Checks if value is a percentage value (e.g. "10.0%")
+            is_percentage = "%" in field_data_text
+
+            # Removes thousands marker
+            value = field_data_text.replace(",", "")
+
+            # Multiplier for value based on suffix symbol
+            multiplier = decimal.Decimal("1.0")
+
+            # All multiplier symbols and their values
+            multiplier_suffixes = {
+                "K": decimal.Decimal(1_000),
+                "M": decimal.Decimal(1_000_000),
+                "B": decimal.Decimal(1_000_000_000),
+                "T": decimal.Decimal(1_000_000_000_000),
+            }
+
+            # Matches any multiplier suffix symbol
+            match = re.search(
+                f"([{''.join(multiplier_suffixes.keys())}])$",
+                value,
+                re.IGNORECASE,
+            )
+
+            # Updates multiplier and removes it from the value
+            if match:
+                multiplier = multiplier_suffixes[match.group(1).upper()]
+                value = value[:-1]
+
+            # Filters characters inside the value
+            value = re.sub(r"[^0-9.\-+]", "", value)
+
+            # Parses the value
+            if value:
+                try:
+                    result = decimal.Decimal(value)
+                except ValueError, TypeError:
+                    pass
+                else:
+                    # Applies multiplier and percentage adjustment
+                    result *= multiplier
+                    if is_percentage:
+                        result /= decimal.Decimal("100.0")
+                    field_data = result
+
+        elif field_type is datetime.datetime:
+            field_data = datetime.datetime.fromisoformat(field_data_text)
+
+        elif field_type is datetime.date:
+            field_data = datetime.date.fromisoformat(field_data_text)
+
+        else:
+            # Unsupported type inside the section model
+            msg = (
+                f"Unsupported parsing type "
+                f"'{getattr(field_type, '__name__', str(field_type))}' encountered. "
+                f"Could not convert raw string value: {field_data_text!r}."
+            )
+            raise TypeError(msg)
+
+        return field_data

@@ -14,7 +14,7 @@ import alembic
 import sqlalchemy
 import sqlalchemy.ext.asyncio
 
-# Import the entire database package
+# IGNORE: Import the entire database package (required on runtime even though it is not used)
 from src.database import base, models  # type: ignore reportUnusedImport # noqa: F401
 
 config = alembic.context.config

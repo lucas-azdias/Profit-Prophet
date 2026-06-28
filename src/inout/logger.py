@@ -56,13 +56,14 @@ class Logger:
     def log(
         self,
         msg: str,
+        *,
         msg_type: typing.Literal["info", "debug", "warning", "error"] = "info",
     ) -> None:
         """Record a message in the log file.
 
-        The message is written using the logging level specified by
-        :param:`msg_type`. Optionally, the message may also be displayed
-        through the application's console interface.
+        The message is written using the logging level specified by `msg_type`.
+        Optionally, the message may also be displayed through the application's
+        console interface.
 
         Args:
             msg (str):
@@ -85,4 +86,7 @@ class Logger:
                 self.__logger.error(log_msg)
 
     def __generate_log_path(self) -> pathlib.Path:
-        return pathlib.Path(self.__logs_path) / f"log_{datetime.datetime.now().astimezone():%Y-%m-%d_%H-%M-%S}.log"
+        return (
+            pathlib.Path(self.__logs_path)
+            / f"log_{datetime.datetime.now().astimezone():%Y-%m-%d_%H-%M-%S}.log"
+        )

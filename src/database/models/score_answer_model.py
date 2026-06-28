@@ -2,7 +2,7 @@
 
 """Score answers database model.
 
-This module defines the :class:`ScoreAnswerModel`, which represents an answer
+This module defines the `ScoreAnswerModel`, which represents an answer
 provided for a score question.
 """
 
@@ -54,4 +54,7 @@ class ScoreAnswerModel(Base, Model):
 
     # N-1
     asset: Mapped[AssetModel] = relationship("AssetModel", back_populates=__plural__)
-    score_question: Mapped[ScoreQuestionModel] = relationship("ScoreQuestionModel", back_populates=__plural__)
+    score_question: Mapped[ScoreQuestionModel] = relationship(
+        "ScoreQuestionModel",
+        back_populates=__plural__,
+    )

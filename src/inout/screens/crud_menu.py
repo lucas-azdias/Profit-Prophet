@@ -2,21 +2,25 @@
 
 """CRUD screen for managing database records.
 
-This module defines :class:`CrudMenu`, a generic database management
-screen that automatically discovers SQLAlchemy models and provides
-interfaces for creating, updating, deleting, and viewing records.
+This module defines `CrudMenu`, a generic database management screen
+that automatically discovers SQLAlchemy models and provides interfaces
+for creating, updating, deleting, and viewing records.
 
 Each registered model is displayed in its own tab, allowing users to
 perform CRUD operations through a common user interface without
 requiring model-specific screens.
 """
 
+import datetime
 import enum
+import graphlib
 import typing
 
 import sqlalchemy
+from textual import on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import Key
 from textual.widgets import Button, DataTable, Input, Rule, Select, TabbedContent, TabPane
 
 from src.database.base import Base
@@ -30,7 +34,19 @@ if typing.TYPE_CHECKING:
 
 
 class CrudSelectValues(enum.Enum):
-    """Supported CRUD operations available in the interface."""
+    """Supported CRUD operations available in the interface.
+
+    Attributes:
+        ADD (enum.auto):
+            Create a new record in the selected table.
+
+        EDIT (enum.auto):
+            Update the currently selected record in the data table.
+
+        DELETE (enum.auto):
+            Remove the currently selected record from the database.
+
+    """
 
     ADD = enum.auto()
     EDIT = enum.auto()
@@ -55,21 +71,6 @@ class CrudMenu(UserScreen):
     ]
 
     CSS = """
-    .screen {
-        width: 100%;
-        height: 100%;
-    }
-
-    .sidebar {
-        width: 20;
-        height: 100%;
-    }
-
-    .sidebar Button {
-        width: 100%;
-        height: 3;
-    }
-
     .input-options {
         width: 1fr;
         height: 3;
@@ -78,10 +79,6 @@ class CrudMenu(UserScreen):
     .input-box {
         width: 1fr;
         align-horizontal: left;
-    }
-
-    .input {
-        height: 3;
     }
 
     .options-box {
@@ -105,10 +102,7 @@ class CrudMenu(UserScreen):
 
     @typing.override
     def compose_body(self) -> ComposeResult:
-        self.__models: list[type[Model]] = sorted(
-            [mapper.class_ for mapper in Base.registry.mappers],
-            key=lambda x: x.__name__,
-        )
+        self.__models = self.__get_sorted_models_by_dependency()
 
         with VerticalScroll(classes="screen", can_focus=False), TabbedContent():
             for model in self.__models:
@@ -120,9 +114,11 @@ class CrudMenu(UserScreen):
                         with Vertical(classes="input-box"):
                             yield Input(
                                 id=f"input-{model.__tablename__}",
-                                classes="input",
                                 placeholder="Type row data...",
-                                tooltip='Type row data and separate columns with ";"',
+                                tooltip=(
+                                    'Type row data, separate columns with ";" '
+                                    'and use "@" for default value'
+                                ),
                             )
                         with Horizontal(classes="options-box"):
                             yield Select[CrudSelectValues](
@@ -145,7 +141,8 @@ class CrudMenu(UserScreen):
                     yield Rule(line_style="solid", orientation="horizontal")
                     yield DataTable[str](id=f"data-table-{model.__tablename__}", cursor_type="row")
 
-    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+    @on(TabbedContent.TabActivated)
+    def handle_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         """Load data for the newly activated tab.
 
         Args:
@@ -159,10 +156,11 @@ class CrudMenu(UserScreen):
         model = self.__find_current_model(event.pane, "tab-")
 
         # Runs worker that populates data table with database data
-        self.run_worker(self.__load_data_table(model))
+        self.run_worker(self.__load_data_table(model), exclusive=True)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events from the main menu.
+    @on(Button.Pressed)
+    def handle_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events.
 
         Args:
             event (Button.Pressed):
@@ -180,16 +178,60 @@ class CrudMenu(UserScreen):
         model = self.__find_current_model(event.button, button_confirm_prefix)
 
         # Gets the select element
-        select = typing.cast("Select[CrudSelectValues]", self.query_one(f"#select-{model.__tablename__}", Select))
+        select = typing.cast(
+            "Select[CrudSelectValues]",
+            self.query_one(f"#select-{model.__tablename__}", Select),
+        )
 
         # Matches the selected action and executes it
         match select.value:
             case CrudSelectValues.ADD:
-                self.run_worker(self.__add_instance(model))
+                self.run_worker(self.__add_instance(model), exclusive=True)
             case CrudSelectValues.EDIT:
-                self.run_worker(self.__edit_instance(model))
+                self.run_worker(self.__edit_instance(model), exclusive=True)
             case CrudSelectValues.DELETE:
-                self.run_worker(self.__delete_instance(model))
+                self.run_worker(self.__delete_instance(model), exclusive=True)
+            case _:
+                msg = "Select an operation first"
+                self.notify(msg, severity="warning")
+                self.app.logger.log(msg, msg_type="warning")
+
+    @on(Key)
+    def handle_key_pressed(self, event: Key) -> None:
+        """Handle key press events.
+
+        Args:
+            event (Key):
+                Event generated when a key is pressed.
+
+        """
+        # Queries for the current tab
+        tabs = self.query_one(TabbedContent)
+        current_tab = tabs.get_pane(tabs.active)
+
+        # Finds the current model
+        model = self.__find_current_model(current_tab, "tab-")
+
+        # Gets the select widget
+        select = typing.cast(
+            "Select[CrudSelectValues]",
+            self.query_one(f"#select-{model.__tablename__}", Select),
+        )
+
+        match event.key:
+            case "ctrl+a":
+                select.value = CrudSelectValues.ADD
+            case "ctrl+e":
+                select.value = CrudSelectValues.EDIT
+            case "ctrl+d":
+                select.value = CrudSelectValues.DELETE
+            case "ctrl+o":
+                self.notify("Executing operation...")
+                button = self.query_one(
+                    f"#button-confirm-{model.__tablename__}",
+                    Button,
+                )
+                button.press()
             case _:
                 pass
 
@@ -208,11 +250,29 @@ class CrudMenu(UserScreen):
         model = self.__find_current_model(current_tab, "tab-")
 
         # Clears the input and reloads data in the table
-        self.run_worker(self.__refresh_data(model))
+        self.run_worker(self.__refresh_data(model), exclusive=True)
+
+    @staticmethod
+    def __parse_bool(value: str) -> bool:
+        match value.strip().lower():
+            case "true" | "1" | "yes" | "y":
+                return True
+            case "false" | "0" | "no" | "n":
+                return False
+            case _:
+                msg = f"Invalid boolean value: {value}"
+                raise ValueError(msg)
 
     def __find_current_model(self, widget: Widget, prefix: str) -> type[Model]:
         if not widget.id:
             msg = f"Couldn't find {widget.__class__.__name__}'s id"
+            raise RuntimeError(msg)
+
+        if not widget.id.startswith(prefix):
+            msg = (
+                f"{widget.__class__.__name__}'s id ('{widget.id}') "
+                f"doesn't contain prefix '{prefix}'"
+            )
             raise RuntimeError(msg)
 
         # Gets the tablename from tab pane
@@ -257,12 +317,34 @@ class CrudMenu(UserScreen):
         # Typed data for each column
         data: dict[str, object] = {}
 
+        # Standard converters for some python types
+        converters: dict[type[object], typing.Callable[[str], object]] = {
+            bool: lambda x: bool(self.__parse_bool(x)),
+            datetime.datetime: datetime.datetime.fromisoformat,
+            datetime.date: datetime.date.fromisoformat,
+        }
+
         # Coverts each column's value to the correct type
         for column, value in zip(columns, values, strict=True):
-            python_type = getattr(column.type, "python_type", str)
+            python_type: type[object] = getattr(column.type, "python_type", str)
+
+            # Default case
+            if value == "@":
+                if column.default is not None or column.nullable:
+                    continue
+
+                msg = f"Column '{column.name}' requires a value."
+                self.notify(msg, severity="warning")
+                self.app.logger.log(msg, msg_type="warning")
+                return None
+
+            # Gets standard converter
+            converter = converters.get(python_type, python_type)
 
             try:
-                data[column.name] = python_type(value)
+                # Common case
+                data[column.name] = converter(value)
+
             except ValueError:
                 msg = f"Invalid value for column '{column.name}'"
                 self.notify(msg, severity="error")
@@ -273,7 +355,10 @@ class CrudMenu(UserScreen):
 
     async def __load_data_table(self, model: type[Model]) -> None:
         # Gets the respective data table
-        data_table = typing.cast("DataTable[str]", self.query_one(f"#data-table-{model.__tablename__}", DataTable))
+        data_table = typing.cast(
+            "DataTable[str]",
+            self.query_one(f"#data-table-{model.__tablename__}", DataTable),
+        )
 
         # Clears data in the table
         data_table.clear(columns=True)
@@ -333,7 +418,10 @@ class CrudMenu(UserScreen):
             return
 
         # Gets the respective data table
-        data_table = typing.cast("DataTable[str]", self.query_one(f"#data-table-{model.__tablename__}", DataTable))
+        data_table = typing.cast(
+            "DataTable[str]",
+            self.query_one(f"#data-table-{model.__tablename__}", DataTable),
+        )
 
         # Gets selected position
         row_key, _ = data_table.coordinate_to_cell_key(data_table.cursor_coordinate)
@@ -348,11 +436,15 @@ class CrudMenu(UserScreen):
                 row_data[column.key] = value
 
         # Compares input and table data to define data to be updated
-        update_data = {key: value for key, value in input_data.items() if str(value) != row_data[key]}
+        update_data = {
+            key: value for key, value in input_data.items() if str(value) != row_data[key]
+        }
 
         # Commits the change to the database
         async with self.app.get_session() as session:
-            await session.execute(sqlalchemy.update(model).filter_by(**pk_data).values(**update_data))
+            await session.execute(
+                sqlalchemy.update(model).filter_by(**pk_data).values(**update_data),
+            )
             await session.commit()
 
         # Clears the input and reloads data in the table
@@ -364,7 +456,10 @@ class CrudMenu(UserScreen):
         self.app.logger.log(f"Deleting '{model.__tablename__}' instance")
 
         # Gets the respective data table
-        data_table = typing.cast("DataTable[str]", self.query_one(f"#data-table-{model.__tablename__}", DataTable))
+        data_table = typing.cast(
+            "DataTable[str]",
+            self.query_one(f"#data-table-{model.__tablename__}", DataTable),
+        )
 
         # Gets selected position
         row_key, _ = data_table.coordinate_to_cell_key(data_table.cursor_coordinate)
@@ -387,3 +482,73 @@ class CrudMenu(UserScreen):
         await self.__refresh_data(model)
 
         self.app.logger.log(f"Deleted '{model.__tablename__}' instance successfully")
+
+    @staticmethod
+    def __get_sorted_models_by_dependency() -> list[type[Model]]:
+        """Sort SQLAlchemy models in order of dependency.
+
+        It goes from least dependent on other models to most dependent.
+
+        Returns:
+            list[type[Model]]:
+                The sorted list of model classes.
+
+        Raises:
+            ValueError:
+                If a circular dependency is detected.
+
+        """
+        # Maps table names to their actual model classes
+        models: dict[str, type[Model]] = {
+            cls.class_.__table__.name: cls.class_
+            for cls in Base.registry.mappers
+            if hasattr(cls.class_, "__table__")
+        }
+
+        # Graph showing dependency between models
+        dependency_graph: dict[str, set[str]] = {}
+
+        # Builds the dependency graph
+        for name, model in models.items():
+            # Finds all tables that this table references via foreign keys
+            dependencies: set[str] = set()
+            for foreign_key in model.__table__.foreign_keys:
+                foreign_name = foreign_key.column.table.name
+
+                # Avoids self referencing loop
+                if foreign_name != name:
+                    dependencies.add(foreign_name)
+
+            # Adds dependencies in graphlib format
+            dependency_graph[name] = dependencies
+
+        # Performs a dynamic topological sort
+        sorter = graphlib.TopologicalSorter(dependency_graph)
+        try:
+            sorter.prepare()
+        except ValueError as e:
+            msg = f"Circular dependency was detected among models: {e}"
+            raise ValueError(msg) from None
+
+        # Models' names in topological order
+        ordered_names: list[str] = []
+
+        # Processes the graph level by level (generation by generation)
+        while sorter.is_active():
+            # Gets all nodes that have 0 remaining unresolved dependencies
+            current_level_nodes = list(sorter.get_ready())
+
+            # Breaks if no more unique level nodes
+            if not current_level_nodes:
+                break
+
+            # Sorts nodes at the current level
+            current_level_nodes.sort()
+
+            # Adds them to the final sequence and marks them as done in the sorter
+            for node in current_level_nodes:
+                ordered_names.append(node)
+                sorter.done(node)
+
+        # Returns model classes in topological order
+        return [models[name] for name in ordered_names if name in models]

@@ -2,11 +2,11 @@
 
 """Command-line configuration loading and parsing.
 
-This module provides the ``ConfigLoader`` class, responsible for defining,
-parsing, and validating command-line arguments.
+This module provides the `ConfigLoader` class, responsible for defining, parsing,
+and validating command-line arguments.
 
-The loader converts user-supplied CLI options into a ``ConfigDTO`` instance
-that encapsulates settings.
+The loader converts user-supplied CLI options into a `ConfigDTO` instance that
+encapsulates settings.
 
 It serves as the primary entry point for transforming command-line input into
 application configuration consumed by other components.
@@ -24,19 +24,24 @@ class ConfigLoader:
     """Command-line configuration loader.
 
     This class is responsible for defining CLI arguments, parsing user input,
-    and producing a validated immutable :class:`ConfigDTO` object used throughout
-    the application lifecycle.
+    and producing a validated immutable `ConfigDTO` object used throughout the
+    application lifecycle.
     """
 
     def __init__(self) -> None:
-        """Initialize the CLI argument parser and parse user-provided arguments into a :class:`ConfigDTO` object."""
+        """Initialize the command-line interface configuration.
+
+        Creates the argument parser, processes command-line arguments supplied by
+        the user, and constructs a `ConfigDTO` instance containing the validated
+        runtime configuration.
+        """
         # Argument parser for all parameters available for user via CLI
         self.__parser = argparse.ArgumentParser(
             prog="Profit Prophet",
             description=(
-                "Manage and optimize your investments across multiple asset classes in one place. Track your "
-                "current allocations, compare them to your target portfolio, and get clear recommendations on "
-                "where to invest new funds as your wealth grows."
+                "Manage and optimize your investments across multiple asset classes in one place. "
+                "Track your current allocations, compare them to your target portfolio, and get "
+                "clear recommendations on where to invest new funds as your wealth grows."
             ),
         )
 
@@ -63,6 +68,9 @@ class ConfigLoader:
             default=5,
             help="Maximum number of retry attempts for establishing a database connection.",
         )
+
+        # Rebuilds the config model to solve imports (aka. `ForwardRef`)
+        ConfigDTO.model_rebuild(_types_namespace=globals())
 
         # All user configurations saved
         self.__config = ConfigDTO(**vars(self.__parser.parse_args()))

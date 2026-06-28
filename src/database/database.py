@@ -2,10 +2,9 @@
 
 """Database connection and session management.
 
-This module defines :class:`Database`, which is responsible for
-initializing the SQLAlchemy engine, managing database sessions,
-verifying connectivity, and applying pending schema migrations during
-application startup.
+This module defines `Database`, which is responsible for initializing
+the SQLAlchemy engine, managing database sessions, verifying connectivity,
+and applying pending schema migrations during application startup.
 """
 
 import asyncio
@@ -16,7 +15,12 @@ import alembic.config
 import sqlalchemy
 import sqlalchemy.engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from src.database.base import Base
 
@@ -101,9 +105,14 @@ class Database:
                 self.__logger.log(f"Database initialization error: {e}", msg_type="error")
                 raise SystemExit(1) from None
 
+            # IGNORE: Used generic exception to intercept any error on connection
+            # which may include third-party custom exceptions
             except Exception as e:  # noqa: BLE001
                 self.__logger.log(
-                    f"Database connection failed (attempt {attempt + 1}/{self.__max_conn_retries}): {e}",
+                    (
+                        "Database connection failed "
+                        f"(attempt {attempt + 1}/{self.__max_conn_retries}): {e}"
+                    ),
                     msg_type="error",
                 )
 
@@ -139,7 +148,7 @@ class Database:
 
         """
         if self.__engine is None:
-            msg = "Database connection has not been initialized."
+            msg = "Database connection has not been initialized"
             raise RuntimeError(msg)
 
         await self.__engine.dispose()
@@ -147,7 +156,7 @@ class Database:
         self.__engine = None
         self.__session_factory = None
 
-        self.__logger.log("Database engine disposed successfully.")
+        self.__logger.log("Database engine disposed successfully")
 
     def get_session(self) -> AsyncSession:
         """Create a new database session.
@@ -157,19 +166,19 @@ class Database:
                 A new asynchronous SQLAlchemy session.
 
         Raises:
-                RuntimeError:
-                    If the database connection has not been initialized.
+            RuntimeError:
+                If the database connection has not been initialized.
 
         """
         if self.__session_factory is None:
-            msg = "Database connection has not been initialized."
+            msg = "Database connection has not been initialized"
             raise RuntimeError(msg)
 
         return self.__session_factory()
 
     async def __upgrade_schema(self) -> None:
         if self.__engine is None:
-            msg = "Database connection has not been initialized."
+            msg = "Database connection has not been initialized"
             raise RuntimeError(msg)
 
         cfg = alembic.config.Config("./alembic.ini")

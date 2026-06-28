@@ -2,10 +2,12 @@
 
 """Asset type database model.
 
-This module defines the :class:`AssetTypeModel` entity, which represents a category
+This module defines the `AssetTypeModel` entity, which represents a category
 of assets within a portfolio.
 """
 
+# IGNORE: Required at runtime because SQLAlchemy resolves Mapped annotations
+import decimal  # noqa: TC003
 import typing
 
 import sqlalchemy
@@ -33,6 +35,10 @@ class AssetTypeModel(Base, Model):
         proportion (int):
             Target allocation proportion assigned to this asset type.
 
+        is_unitary_asset (bool):
+            Whether asset quantities should be ignored during
+            calculations.
+
         is_question_scored (bool):
             Indicates whether the asset type allocation is determined
             through questionnaire scoring.
@@ -56,7 +62,8 @@ class AssetTypeModel(Base, Model):
 
     id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(sqlalchemy.String)
-    proportion: Mapped[int] = mapped_column(sqlalchemy.Integer)
+    proportion: Mapped[decimal.Decimal] = mapped_column(sqlalchemy.Numeric(20, 8))
+    is_unitary_asset: Mapped[bool] = mapped_column(sqlalchemy.Boolean, default=True)
     is_question_scored: Mapped[bool] = mapped_column(sqlalchemy.Boolean, default=False)
 
     portfolio_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey("portfolio.id"))
@@ -65,7 +72,11 @@ class AssetTypeModel(Base, Model):
     portfolio: Mapped[PortfolioModel] = relationship("PortfolioModel", back_populates=__plural__)
 
     # 1-N
-    assets: Mapped[list[AssetModel]] = relationship("AssetModel", back_populates=__tablename__, uselist=True)
+    assets: Mapped[list[AssetModel]] = relationship(
+        "AssetModel",
+        back_populates=__tablename__,
+        uselist=True,
+    )
     score_questions: Mapped[list[ScoreQuestionModel]] = relationship(
         "ScoreQuestionModel",
         back_populates=__tablename__,
