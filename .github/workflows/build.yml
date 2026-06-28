@@ -30,12 +30,12 @@ jobs:
 
         steps:
             - name: Doing checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Setting up Python
-              uses: actions/setup-python@v6
+              uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
               with:
-                  python-version: 3.12
+                  python-version: 3.14
                   architecture: ${{ matrix.arch }}
 
             - name: Installing dependencies
@@ -45,7 +45,7 @@ jobs:
                   pip install -r requirements.txt
 
             - name: Compiling
-              uses: Nuitka/Nuitka-Action@v1.4
+              uses: Nuitka/Nuitka-Action@0d4e22d4b66062a13d120f6948dd90170be04b3a # v1.4
               with:
                   script-name: src
                   mode: onefile
@@ -74,7 +74,7 @@ jobs:
                   fi
 
             - name: Uploading artifacts
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: ${{ env.APP_NAME }}-${{ runner.os }}-${{ matrix.arch }}
                   path: dist/*
@@ -87,12 +87,12 @@ jobs:
 
         steps:
             - name: Downloading artifacts
-              uses: actions/download-artifact@v8
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
               with:
                   path: dist
 
             - name: Creating release
-              uses: softprops/action-gh-release@v3
+              uses: softprops/action-gh-release@2bb465e97f322d3cb2a965294d483e0d26a67aa9 # v3.0.1
               with:
                   files: dist/**/*
                   make_latest: true
