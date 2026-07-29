@@ -3,6 +3,8 @@ name = "portfolio-manager"
 version = "0.1.0"
 description = "Manage and optimize your investments across multiple asset classes in one place. Track your current allocations, compare them to your target portfolio, and get clear recommendations on where to invest new funds as your wealth grows."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     "aiosqlite>=0.22.1",
